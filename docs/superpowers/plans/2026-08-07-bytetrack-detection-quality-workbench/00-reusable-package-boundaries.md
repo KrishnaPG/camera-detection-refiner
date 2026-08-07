@@ -21,6 +21,9 @@
 - Create: `packages/evaluation-regression/src/evaluation_regression/__init__.py`
 - Create: `packages/visual-reporting/src/visual_reporting/__init__.py`
 - Create: `packages/platform-review/src/platform_review/__init__.py`
+- Create: `packages/vision-review-contracts/src/vision_review_contracts/__init__.py`
+- Create: `packages/vision-review-artifacts/src/vision_review_artifacts/__init__.py`
+- Create: `packages/biodock-generator-package/src/biodock_generator_package/__init__.py`
 - Create: `packages/review-journey/src/review_journey/__init__.py`
 - Create: `packages/lineage-replay/src/lineage_replay/__init__.py`
 - Create: `packages/replay-workbench/src/replay_workbench/__init__.py`
@@ -43,6 +46,40 @@
   - One package per reusable ownership boundary.
   - A thin `apps/handdetect-cli` package for CLI commands and app-specific wiring only.
   - Drift guard `tests/drift/test_package_boundaries.py`.
+
+## Reuse-First Rule
+
+Before creating any new package listed in this task, the implementer must prove that the
+capability is not already owned by either:
+
+1. an existing BioDock reusable package under `external/biodock/frontend/packages/`, or
+2. a mature permissive open-source project already selected in the implementation plan.
+
+If an existing package is close enough, extend it behind its existing ownership boundary. Do not
+create a parallel HandDetect package with a different state model, layout model, viewer adapter,
+manifest format, or platform bridge.
+
+## Existing Reuse Inventory
+
+| Capability | Existing owner | Decision |
+|---|---|---|
+| Generator package descriptors, semantic panel runtime, actions, selectors, evidence | `@biodock-labs/generator-workspace-runtime` | Reuse directly. Do not create a HandDetect runtime. |
+| FlexLayout compilation from package slots and base layouts | `@biodock-labs/generator-workspace-host-adapters`, `@biodock-labs/flexlayout-topology-adapter` | Extend only to add `berg10.generator.videoReview`; do not hand-author FlexLayout JSON in HandDetect. |
+| BioDock panel hosting and workspace chrome | `@biodock-labs/scientific-workspace`, `@biodock-labs/generator-workspace-react` | Reuse directly for story-page hosting. |
+| Panel artifacts and viewer adapter manifests | `@biodock-labs/artifact-viewer-adapter-registry`, `@biodock-labs/static-artifact-descriptor-cache` | Reuse/extend adapter registrations only. |
+| Browser diagnostics and visible proof | `@biodock-labs/browser-diagnostics`, `@biodock-labs/presentation-readiness-state` | Reuse directly for frame budget, sync drift, missing assets, and story-readiness status. |
+| Hot viewer state and lifecycle cleanup | `@biodock-labs/viewer-hot-state-refs`, `@biodock-labs/lifecycle-leases` | Reuse directly for video/canvas refs, animation frames, and cleanup. |
+| Long-lived streams and keyed feed state | `@biodock-labs/current-state-feed`, `@biodock-labs/shared-feed-registry`, `@biodock-labs/valtio-stream-state`, `@biodock-labs/eventsource-feed-session` | Reuse directly if live progress/events are streamed into panels. |
+| Query keys and selector safety | `@biodock-labs/query-key-factory`, `@biodock-labs/react-external-store-selectors` | Reuse directly; no ad-hoc query-key arrays or broad snapshots. |
+| Visual contracts and legibility checks | `@biodock-labs/visual-ui-contracts`, `@biodock-labs/visual-legibility-verifier`, `@biodock-labs/visual-pattern-catalog` | Reuse for visual-quality gates against the mock. |
+| Berg10 C-view/Arrow data projection | `@biodock-labs/berg10-columnar-store`, `@biodock-labs/berg10-cview-arrow-stream`, `@biodock-labs/berg10-cview-react` | Reuse for run rows/artifact views; do not build a separate browser data plane. |
+| Temporal multimodal MOT/video inspection | Rerun, MIT OR Apache-2.0 | Use for deep synchronized playback and MOT debugging; do not duplicate its full viewer. |
+| Visual CV dataset inspection/filtering | FiftyOne, Apache-2.0 | Use for dataset/sample/prediction review and filtering; do not recreate a dataset browser. |
+| Human video/image annotation | CVAT Community, MIT; Label Studio through configured service/SDK | Phase 1 uses Label Studio handoff; Phase 2 uses CVAT for video correction. Do not implement custom annotation UI. |
+| Dataset import/export/diff | Datumaro, MIT | Use in Phase 2; do not build bespoke converters/diff tools. |
+| Experiment tracking and regressions | MLflow, DVC/DVCLive, Evidently | Use for run comparison, metric history, exact restore, and reports/workspace links. |
+| Low-level timeline widget | `react-timeline-editor`, MIT, only if BioDock/Rerun cannot cover the interaction | Allowed as a component inside a BioDock panel, not as a new app/runtime. |
+| Full browser video editor kits | OpenVideo/RVE-style projects have mixed or commercial licensing | Do not adopt without a license review; the product needs review/playback, not editing/export authoring. |
 
 ## Fixed-Point Reusable Pattern Extraction
 
@@ -112,6 +149,13 @@
       statuses, and platform URL/path manifests.
     - Reusable because visual CV review and annotation correction recur across projects.
     - Must never implement custom annotation editing or run comparison.
+  - `vision-review-contracts`:
+    - Owns only backend/browser artifact contracts that BioDock and external tools consume:
+      story manifests, clip timeline/event/track/chapter schemas, panel ids, layer ids,
+      support states, and platform-link contracts.
+    - Reusable because many CV adapters need a compact browser-review artifact contract.
+    - Must not own React state, FlexLayout topology, viewer lifecycle, or BioDock runtime logic;
+      those are already owned by BioDock packages.
 
 - Round 2 reusable composites built from Round 1:
   - `mot-bytetrack`:
@@ -140,6 +184,21 @@
       annotation helpers.
     - Owns sampled frame manifests, overlays, contact sheets, and static report fragments.
     - Must never run adapter logic or decide whether a detection is valid.
+  - `vision-review-artifacts`:
+    - Composes `vision-review-contracts`, `vision-columnar`, `decision-ledger`,
+      `run-artifacts`, `visual-reporting`, Rerun export hooks, and open-source video/image
+      tooling.
+    - Owns compact artifact projection only: timeline/event/track JSON, chapter extraction,
+      overlay video generation, thumbnail strips, and Rerun recording manifests.
+    - Must not implement a timeline UI, custom dataset browser, custom annotation editor, or
+      video-editor runtime. BioDock, Rerun, FiftyOne, Label Studio, and CVAT own those.
+  - `biodock-generator-package`:
+    - Composes `vision-review-contracts`, `review-journey`, `run-artifacts`, and BioDock
+      Generator Package descriptor/view/theme files.
+    - Owns package artifact publication and compatibility checks for `handdetect-quality-adapter`.
+    - Must not duplicate `generator-workspace-runtime`, `generator-workspace-host-adapters`,
+      `scientific-workspace`, or `flexlayout-topology-adapter`; changes needed there must be
+      upstreamed or pinned in BioDock.
   - `review-journey`:
     - Composes `experiment-tracking`, `platform-review`, `visual-reporting`, and
       `run-artifacts`.
@@ -155,18 +214,26 @@
 - Round 3 reusable product shells built from Round 2:
   - `replay-workbench`:
     - Composes `lineage-replay`, `review-journey`, `evaluation-regression`, and FastAPI.
-    - Owns a local operator UI for run detail, lineage proof, typed overrides, replay status,
-      and platform links.
-    - Must never implement custom charts, annotation screens, or video browsers.
+    - Owns only fallback local orchestration for run detail, lineage proof, typed overrides,
+      replay status, and platform links when BioDock is unavailable.
+    - Must never implement custom charts, annotation screens, video browsers, or the primary
+      story page.
+  - `biodock-vision-review-workspace` is not created as a new package in this repository:
+    - Existing BioDock packages already own workspace runtime, FlexLayout host integration,
+      C-view projection, diagnostics, and viewer lifecycle.
+    - Required implementation is an extension to BioDock base layouts plus HandDetect package
+      descriptors/panels, not a parallel workbench package.
   - `detector-quality-workbench` remains a conceptual composition, not a package in this
     delivery:
     - It would compose `experiment-runner`, `dq-filter-kit`, `mot-interfaces`,
-      `evaluation-regression`, `review-journey`, `lineage-replay`, and `replay-workbench`.
-    - It is not created as a package now because the hand-specific app is the only concrete
-      consumer in this repository.
+      `evaluation-regression`, `review-journey`, `lineage-replay`, `replay-workbench`, and
+      `biodock-generator-package`.
+    - It is not created as a package now because BioDock provides the reusable host and the
+      hand-specific app is the only concrete backend consumer in this repository.
 
 - Round 4 fixed-point result:
-  - No further reusable packages are extracted after `replay-workbench`.
+  - No further reusable packages are extracted after `replay-workbench` and
+    `biodock-generator-package`.
   - Remaining modules are business/domain-specific because they depend on this assignment's
     ZED/WiLoR/VIO layout or hand-specific behavior.
   - Domain-specific packages:
@@ -201,6 +268,9 @@
   - `evaluation-regression`
   - `visual-reporting`
   - `platform-review`
+  - `vision-review-contracts`
+  - `vision-review-artifacts`
+  - `biodock-generator-package`
   - `review-journey`
   - `lineage-replay`
   - `replay-workbench`
@@ -238,7 +308,9 @@
 - Existing task snippets that reference `src/handdetect/report` must implement reusable visual
   report builders in `packages/visual-reporting` and hand-specific copy in `handdetect-domain`.
 - Existing task snippets that reference `src/handdetect/review` must implement platform bridges in
-  `packages/platform-review`.
+  `packages/platform-review`, compact story artifact contracts in
+  `packages/vision-review-contracts`, artifact projection in `packages/vision-review-artifacts`,
+  and BioDock package publication in `packages/biodock-generator-package`.
 - Existing task snippets that reference `src/handdetect/tracking_platforms` must implement exports
   in `packages/experiment-tracking`.
 - Existing task snippets that reference `src/handdetect/experiments` or `src/handdetect/pipeline`
@@ -249,7 +321,8 @@
   implement generic label freezing and replay in `packages/label-versions` and
   `packages/lineage-replay`.
 - Existing task snippets that reference `src/handdetect/workbench` must implement the local UI in
-  `packages/replay-workbench`.
+  `packages/replay-workbench` only as fallback orchestration. The primary story UI must use
+  BioDock Generator Package panels and existing BioDock frontend packages.
 - Existing task snippets that reference `src/handdetect/cli` must implement only app command
   wiring in `apps/handdetect-cli`.
 
@@ -262,6 +335,9 @@
   parsing, tracking, label freezing, replay, review bridges, or metrics.
 - A duplicate second implementation of any reusable pattern inside `apps/handdetect-cli` or a
   hand-specific package is a plan violation.
+- A duplicate second implementation of BioDock-owned runtime, FlexLayout compilation, workspace
+  chrome, diagnostics, hot refs, stream/session state, or visual contract verification is a plan
+  violation.
 
 - [ ] **Step 1: Write package-boundary drift guard**
 
@@ -286,6 +362,9 @@ REUSABLE_IMPORT_PREFIXES = (
     "evaluation_regression",
     "visual_reporting",
     "platform_review",
+    "vision_review_contracts",
+    "vision_review_artifacts",
+    "biodock_generator_package",
     "review_journey",
     "lineage_replay",
     "replay_workbench",
@@ -324,6 +403,8 @@ def test_handdetect_domain_packages_import_reusable_packages_for_shared_logic() 
 
 Create `PACKAGE_BOUNDARIES.md` by copying the sections:
 
+- `Reuse-First Rule`
+- `Existing Reuse Inventory`
 - `Fixed-Point Reusable Pattern Extraction`
 - `Final Package List`
 - `Normative Path Map For Existing Tasks`
@@ -353,6 +434,9 @@ mkdir -p packages/experiment-runner/src/experiment_runner
 mkdir -p packages/evaluation-regression/src/evaluation_regression
 mkdir -p packages/visual-reporting/src/visual_reporting
 mkdir -p packages/platform-review/src/platform_review
+mkdir -p packages/vision-review-contracts/src/vision_review_contracts
+mkdir -p packages/vision-review-artifacts/src/vision_review_artifacts
+mkdir -p packages/biodock-generator-package/src/biodock_generator_package
 mkdir -p packages/review-journey/src/review_journey
 mkdir -p packages/lineage-replay/src/lineage_replay
 mkdir -p packages/replay-workbench/src/replay_workbench

@@ -157,6 +157,53 @@ Phase 2 must add production-shaped integration without changing run lineage sema
   - Store exact run, baseline, dataset hash, label-set id, config hash, and metric table refs in Evidently metadata.
   - Link exact Evidently workspace/report from BioDock, MLflow artifacts, and static fallback report.
 
+### Reuse-First Module Decision Matrix
+
+This matrix is normative with `00-reusable-package-boundaries.md`. A package may be created only
+when the capability is not already owned by BioDock or a selected open-source platform.
+
+| Capability | First-Level Reusable Pattern | Existing Or Close Owner | Decision |
+|---|---|---|---|
+| Typed ids, enums, error/status contracts | `dq-contracts` | No close BioDock/backend owner in this repo | Create reusable backend package. |
+| Raw/untrusted validation, canonical config hashing | `dq-boundaries` | Pydantic v2, stdlib hashing | Create thin reusable package over Pydantic/canonical serializers. |
+| Ready resources, providers, command runners, path builders | `dq-resources` | Python stdlib/contextlib, existing repo patterns | Create backend package; do not duplicate per feature. |
+| Phase-level telemetry contracts | `dq-observability` | `structlog`, OpenTelemetry, Prometheus | Create thin constants/handle package over OSS; no custom exporter stack. |
+| Columnar detection/track/decision blocks | `vision-columnar` | NumPy, Arrow, Polars | Create reusable memory-shape package; keep zero-copy native views. |
+| Box geometry and vectorized gates | `vision-geometry` | NumPy primitives | Create reusable package; no hand thresholds here. |
+| MOT adapter protocol | `mot-interfaces` | No package-specific protocol owner | Create reusable interface package. |
+| Decision/audit ledger schemas | `decision-ledger` | No platform owner | Create reusable package; policies call it, it never decides. |
+| Immutable runs/catalogs | `run-artifacts` | DVC handles versioned data, not run root layout | Create reusable run-store package that links to DVC. |
+| Label freezing/versioning | `label-versions` | DVC plus Label Studio/CVAT exports | Create canonicalization wrapper; do not build annotation UI. |
+| Experiment export status | `experiment-tracking` | MLflow, DVC/DVCLive, Evidently | Create thin adapters only; platforms own comparison/charts. |
+| Review platform bridge | `platform-review` | FiftyOne, Label Studio, Rerun, CVAT, Datumaro | Create manifest/bridge adapters only; no custom platform clone. |
+| Story artifact schemas | `vision-review-contracts` | BioDock consumes typed descriptors but does not own HandDetect artifact schema | Create backend/browser contract package only. |
+
+Second-level composites:
+
+| Capability | Composite Package | Existing Or Close Owner | Decision |
+|---|---|---|---|
+| ByteTrack association | `mot-bytetrack` | `trackers==2.6.0` ByteTrack | Create adapter only; ByteTrack owns MOT algorithm. |
+| False-positive filter registry | `dq-filter-kit` | Generic enough for reuse; hand thresholds are domain | Create registry/strategy package; policies provide thresholds. |
+| Experiment suite orchestration | `experiment-runner` | No existing package; uses DVC/MLflow handles | Create reusable state-machine runner. |
+| Evaluation/regression gates | `evaluation-regression` | MLflow/DVC/Evidently visualize; they do not compute adapter metrics | Create metric/gate package and export to platforms. |
+| Static fallback reporting | `visual-reporting` | OpenCV/Supervision draw helpers | Create fallback artifact helpers only; not primary UI. |
+| Story artifact projection | `vision-review-artifacts` | Rerun/FiftyOne visualize; BioDock hosts; none owns compact run artifact projection | Create projection package; do not implement viewer runtime. |
+| BioDock package publication | `biodock-generator-package` | BioDock owns runtime/layout/chrome | Create only HandDetect descriptor/view/theme/action publisher; extend BioDock for `berg10.generator.videoReview`. |
+| Platform journey manifest | `review-journey` | Platforms own their own UIs | Create run-scoped URL/status manifest and launcher only. |
+| Lineage replay | `lineage-replay` | Git/DVC own restore bytes | Create orchestration package only; no custom lineage database. |
+
+Third-level/fixed-point modules:
+
+| Module | Existing Or Close Owner | Decision |
+|---|---|---|
+| `replay-workbench` | BioDock is primary UI | Keep only fallback FastAPI orchestration. Do not build another visual workbench. |
+| `biodock-vision-review-workspace` | BioDock packages already own workspace runtime, FlexLayout, diagnostics, hot refs, streams, C-view projection, and visual contracts | Do not create this package. Extend BioDock packages in place or pin the required BioDock commit. |
+| `detector-quality-workbench` | Conceptual composition | Do not create until there are multiple concrete consumers. |
+| `handdetect-domain` | Business-specific | Create for hand vocabulary/config constants only. |
+| `handdetect-io` | Business-specific assignment data layout | Create for ZED/WiLoR/VIO parsing only. |
+| `handdetect-policies` | Business-specific | Create for hand thresholds/max-two/no-interpolation policy only. |
+| `apps/handdetect-cli` | App shell | Keep thin command wiring only. |
+
 ---
 
 ## 1. Goal, Non-Goals, Delete List
