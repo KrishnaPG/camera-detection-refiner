@@ -1,0 +1,193 @@
+# ByteTrack Detection Quality Workbench Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Build a production-shaped false-positive hand-detection quality workbench that cleans raw detector boxes with ByteTrack MOT, emits auditable corrected detections, supports repeatable experiments, and demonstrates accuracy with labeled and visual review artifacts.
+
+**Architecture:** The adapter is a library-first pipeline with typed boundary parsers, Arrow/NumPy hot-path buffers, a ByteTrack association adapter, pluggable false-positive filters, a deterministic run registry, and static review outputs. The CLI is the first public entrypoint; batch/API/streaming/edge wrappers must reuse the same `AdapterPipeline.run_clip()` core contract.
+
+**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.5.1`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `opencv-python-headless==5.0.0.93`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==1.20.1`.
+
+## Global Constraints
+
+- Scope is false-positive handling only: duplicate merge, implausible size, implausible shape, implausible displacement, unsupported flicker, static scene detections, and max-two wearer-hand selection.
+- False-negative interpolation is not implemented and every output run must report `interpolated_detection_count = 0`.
+- ByteTrack is mandatory for MOT association. Use `trackers==2.6.0`; use `supervision==0.30.0` only for detection containers and visual annotation helpers.
+- The legacy `supervision.ByteTrack` API is not allowed because current Supervision docs deprecate it in favor of the external `trackers` package.
+- Every run must be immutable and identified by `RunId`; every experiment must be identified by `ExperimentId`; every input clip must retain `ClipId` provenance from `meta.json`.
+- Core logic must not read environment variables, current time, filesystem, network, or random state directly. Public entrypoints create providers and ready handles.
+- Pydantic `model_validate` may appear only in boundary parsers for JSON/config/manifest/label imports.
+- Internal hot-path transfer is typed object -> NumPy view or Arrow table. Do not serialize to dict/JSON between internal modules.
+- Video frames are decoded only for overlay/report generation. Adapter logic consumes detection/pose/timestamp arrays and must not decode video.
+- Files must remain under 450 LOC; functions under 50 LOC; all function parameters and returns must be annotated; `Any` is allowed only at a documented third-party boundary.
+- Tests enter through root tasks and public CLIs only. Tests must use the real downloaded dataset, generated run manifests, and production entrypoints; no mocks, monkeypatches, fake clients, fake stores, or hardcoded sample payloads.
+- Root task interface must expose `bootstrap`, `doctor`, `run`, `check`, `test`, `verify`, `seed`, `migrate`, and `clean`.
+- Custom React is not part of this first delivery. Static HTML/FiftyOne/Label Studio exports provide UX; if a React UI is added later it must follow `docs/coding-standards-frontend.md`.
+- The code must strictly adhere to `docs/coding-standards.md`, `docs/coding-standards-frontend.md`, and `docs/coding-repo-standards.md`.
+
+---
+
+## 1. Goal, Non-Goals, Delete List
+
+- Final user-visible outcome:
+  - `make run` executes the default experiment suite over `data/`, writes immutable run artifacts under `runs/<run_id>/`, and prints the run id plus report path.
+  - `runs/<run_id>/report/index.html` shows raw-vs-cleaned metrics, filter-stage deltas, visual before/after examples, regression status, and top error cases.
+  - `runs/<run_id>/cleaned/<clip_id>.json` contains corrected detections with at most two final hands per frame.
+  - `runs/<run_id>/audit/<clip_id>.jsonl` records every input detection as `kept`, `merged`, or `rejected` with stage, reason, source detection id, destination detection id when merged, track id when available, and provenance.
+  - `runs/<run_id>/tables/*.parquet` stores metrics, detections, tracks, and decisions for fast comparison across runs and experiments.
+- Non-goals:
+  - Do not retrain WiLoR, YOLO, or any detector.
+  - Do not implement false-negative interpolation.
+  - Do not require stereo-depth filtering in the first delivery because no calibration contract is present in the downloaded dataset.
+  - Do not build a long-lived web service or streaming runtime in the first delivery.
+  - Do not build a custom React frontend in the first delivery.
+- Planned items removed because they do not directly serve the final outcome:
+  - Removed DeepStream/GStreamer/Kafka/Flink runtime implementation; record them only in `ARCHITECTURE.md` as deployment targets after the CLI workbench proves the core.
+  - Removed custom MOT code; ByteTrack owns association.
+  - Removed custom charting app; static HTML and FiftyOne export cover interview UX without adding frontend state complexity.
+  - Removed per-frame trace spans; phase-level metrics and sampled visual artifacts give observability without hot-path allocation pressure.
+
+## 2. End-to-End Flow Map
+
+- `data/README.md` and clip folders on disk -> `handdetect.io.dataset.Scanner` -> discovers `ClipPathSet` values with `clip_id`, `meta_path`, `hand_boxes_path`, `frame_ts_path`, `vio_pose_path`, and optional video paths -> `ValidatedClipPathSet` -> validation checks required files and path ownership -> no external call -> clip-level bounded process pool -> no serde, path objects only -> error path emits `HDQ_DATASET_MISSING_FILE`.
+- Raw JSON files -> `handdetect.io.parsers.JsonBoundaryParser` -> Pydantic validation into `ValidatedClipBundle` with `ValidatedHandBoxes`, `ValidatedFrameTimestamps`, `ValidatedVioPose`, and `ValidatedClipMeta` -> validation checks frame count, monotonic timestamps, pose length, box coordinates inside declared frame size, and detector uncapped flag -> persistence read only -> no concurrency inside parser -> JSON serde occurs once at boundary -> error path emits `HDQ_INVALID_CLIP_JSON`.
+- `ValidatedClipBundle` -> `handdetect.hotpath.columnar.ClipColumnBuilder` -> builds contiguous `DetectionBlock` NumPy arrays and Arrow `RecordBatch` handles -> output owns `DetectionId`, `FrameIndex`, `BoxXYXY`, `Confidence`, `DetectorHandedness`, and `ClipTimestampNs` arrays -> revalidation checks new invariant that array lengths match -> no persistence -> no async -> one allocation per column, no per-detection Python object transfer after this point -> error path emits `HDQ_COLUMNAR_BUILD_FAILED`.
+- `DetectionBlock` -> `handdetect.filters.geometric.GeometricFilterPipeline` -> duplicate candidates merged, implausible size/shape rejected, remaining candidate ids passed forward -> output `GeometricStageResult` with decision arrays and candidate mask -> validation checks every source detection has exactly one geometric decision -> no persistence -> vectorized NumPy operations -> no serde -> error path emits `HDQ_GEOMETRIC_FILTER_FAILED`.
+- `GeometricStageResult` -> `handdetect.tracking.bytetrack.ByteTrackAssociationAdapter` -> feeds one frame at a time to `trackers.ByteTrackTracker` using NumPy tensor views shaped `[x1, y1, x2, y2, score, class_id]` -> output `TrackBlock` with `TrackId` per surviving candidate plus track lifecycle events -> validation checks frame ids are monotonic and tracker ids are positive for active tracks -> no persistence -> single clip worker, frame loop bounded by clip length -> one tensor view per frame, no JSON serde -> error path emits `HDQ_BYTETRACK_FAILED`.
+- `TrackBlock` + VIO pose arrays -> `handdetect.filters.temporal.TemporalFilterPipeline` -> rejects implausible displacement, unsupported short tracks, and static detections under camera motion -> output `TemporalStageResult` with decision arrays and stage metrics -> validation checks every tracked candidate has terminal keep/reject status -> no persistence -> vectorized per-track operations -> no serde -> error path emits `HDQ_TEMPORAL_FILTER_FAILED`.
+- `TemporalStageResult` -> `handdetect.selection.max_two.MaxTwoSelector` -> ranks remaining detections by track support, confidence, continuity, and border context -> output `SelectedDetectionBlock` with at most two detections per frame -> validation checks `max_selected_per_frame <= 2` and no interpolated detections -> no persistence -> frame-grouped vectorized ranking -> no serde -> error path emits `HDQ_SELECTOR_FAILED`.
+- `SelectedDetectionBlock` + all stage decisions -> `handdetect.audit.ledger.DecisionLedgerWriter` -> writes `audit/<clip_id>.jsonl`, `cleaned/<clip_id>.json`, and Arrow/Parquet tables -> output persisted artifacts plus `ClipRunSummary` -> validation happens on persistence read in regression/eval tasks only -> filesystem writes through `RunArtifactStore` ready handle -> clip-level parallelism with atomic temp-file rename -> serde at external artifact boundary only -> error path emits `HDQ_ARTIFACT_WRITE_FAILED`.
+- `RunArtifactStore` persisted tables + optional gold labels -> `handdetect.eval.metrics.EvaluationRunner` -> computes raw-vs-cleaned precision, recall guardrail, false positives per 1k frames, duplicate rate, over-cap frames, and per-stage deltas -> output `EvaluationSummary` and Parquet metrics -> validation of labels at label import boundary -> no network -> bounded clip-level parallelism -> Arrow/Polars lazy scans, no JSON hot path -> error path emits `HDQ_EVAL_FAILED`.
+- Run summaries + metrics + overlay samples -> `handdetect.report.static_report.StaticReportBuilder` and `handdetect.review.fiftyone_export.FiftyOneExporter` -> static HTML, CSS, frame contact sheets, optional overlay videos, and FiftyOne dataset export -> output reviewer UX artifacts -> revalidation of artifact manifests before report write -> video decode only in this stage -> bounded frame decoding by sample manifest -> frame copies limited to annotation output images/videos -> error path emits `HDQ_REPORT_FAILED`.
+- Current run metrics + baseline manifest -> `handdetect.regression.gates.RegressionGateRunner` -> compares configured thresholds and records pass/fail -> output `regression.json` and CLI exit code -> revalidates persisted current/baseline manifests -> no network -> no async -> Polars scans over Parquet, no JSON path -> error path emits `HDQ_REGRESSION_FAILED`.
+
+## 3. Structure Derived From Flow
+
+- First reusable pattern round:
+  - Typed boundary parser: `handdetect.io.parsers` validates external JSON/config/labels once and returns domain models.
+  - Run artifact store: `handdetect.runs.store` owns immutable output paths, atomic writes, manifests, and cleanup by `RunId`.
+  - Columnar block: `handdetect.hotpath.columnar` owns NumPy/Arrow memory layout for detections, tracks, and decisions.
+  - Filter registry: `handdetect.filters.registry` maps typed `FilterName` to `FilterStrategy` without if/else chains.
+  - Tracker adapter: `handdetect.tracking.interfaces` isolates third-party MOT libraries behind typed native input/output shapes.
+  - Metrics registry: `handdetect.metrics.registry` centralizes metric names, counters, histograms, and report query ids.
+  - State-machine runner: `handdetect.pipeline.state_machine` owns job and clip phase transitions.
+- Second reusable pattern round:
+  - Experiment engine: `handdetect.experiments.runner` composes config, run store, pipeline, metrics, and regression gates into repeatable experiment suites.
+  - Review artifact builder: `handdetect.report` composes persisted tables and sample manifests into HTML/visual outputs.
+  - Label/evaluation workbench: `handdetect.eval` composes label imports, IoU matching, stage metrics, and calibration sweeps.
+- Final module list:
+  - `handdetect.config`: typed runtime and experiment configuration.
+  - `handdetect.domain`: Pydantic domain models, branded ids, enums, constants.
+  - `handdetect.io`: dataset scanning and boundary parsing.
+  - `handdetect.hotpath`: NumPy/Arrow columnar blocks and vectorized geometry helpers.
+  - `handdetect.filters`: geometric and temporal false-positive filters.
+  - `handdetect.tracking`: ByteTrack adapter and tracker interfaces.
+  - `handdetect.selection`: max-two final hand selection.
+  - `handdetect.audit`: decision ledger and cleaned detection writer.
+  - `handdetect.pipeline`: state-machine orchestration and bounded clip execution.
+  - `handdetect.runs`: immutable run store, provenance, manifests, and cleanup.
+  - `handdetect.experiments`: experiment matrix execution and comparison.
+  - `handdetect.eval`: labels, IoU matching, accuracy metrics, calibration sweeps.
+  - `handdetect.report`: static HTML, sampled overlays, FiftyOne export.
+  - `handdetect.regression`: baseline comparison and pass/fail gates.
+  - `handdetect.cli`: public Typer commands only.
+- Module ownership rules:
+  - `handdetect.domain` owns type names and enums; it never reads files or runs algorithms.
+  - `handdetect.io` owns untrusted data validation; it never filters detections or writes run artifacts.
+  - `handdetect.hotpath` owns memory layout; it never knows filesystem paths or experiment ids.
+  - `handdetect.tracking` owns ByteTrack integration; it never decides false-positive policy beyond tracker association.
+  - `handdetect.filters` owns decision policies; it never writes JSON/Parquet.
+  - `handdetect.pipeline` owns state transitions; it never parses raw JSON or formats reports.
+  - `handdetect.report` owns reviewer artifacts; it never changes cleaned detections.
+
+## 4. Validation, Resource Lifetime, Boundary Transfer, and Test Plan
+
+- Validation path:
+  - `RawClipJson` -> `JsonBoundaryParser.parse_clip()` -> `ValidatedClipBundle` -> internal modules pass validated models and native NumPy/Arrow blocks.
+  - `RawExperimentConfig` -> `ExperimentConfigParser.parse_path()` -> `ValidatedExperimentConfig`.
+  - `RawGoldLabels` -> `LabelBoundaryParser.parse_coco()` -> `ValidatedGoldLabelSet`.
+- Revalidation triggers:
+  - Revalidate after JSON read, YAML/TOML config read, Parquet persistence read, JSONL audit persistence read, CLI user input, and transforms that create `DetectionBlock`, `TrackBlock`, `SelectedDetectionBlock`, or `RunManifest`.
+  - Do not fully revalidate between geometric filters, ByteTrack adapter, temporal filters, and selector.
+- Boundary transfer:
+  - Internal modules receive Pydantic domain models, `numpy.ndarray` views, `pyarrow.RecordBatch`, or `polars.LazyFrame`.
+  - Custom DTOs are allowed only for external artifacts: cleaned JSON, audit JSONL, run manifest JSON, regression JSON, and label import/export JSON.
+- State-machine path:
+  - `RunState` values: `created`, `dataset_scanned`, `clips_running`, `artifacts_written`, `evaluated`, `reported`, `regression_checked`, `complete`, `failed`, `cancelled`.
+  - `RunEvent` values: `scan_ok`, `clip_started`, `clip_succeeded`, `clip_failed`, `all_clips_succeeded`, `eval_succeeded`, `report_succeeded`, `regression_succeeded`, `failure_seen`, `cancel_requested`.
+  - Transition handlers own metrics, log context, artifact manifest updates, and cleanup of temp files.
+- RAII path:
+  - `RunArtifactStore.open(config, clock, id_provider)` returns a ready handle with non-optional root paths.
+  - `DatasetScanner.scan(data_root)` returns `ValidatedClipPathSet` values only after required data path checks pass.
+  - `TelemetryHandle.open(config)` returns a ready handle whose exporter failures are non-blocking.
+  - Factories use `contextlib.ExitStack` so temp directories and file handles are cleaned by the owner that acquired them.
+- Test path:
+  - `make seed` builds `runs/seed/seed-manifest.json` from real `data/` clip ids and records a small deterministic smoke subset.
+  - `make test` runs public CLI acceptance tests against that seed manifest and real dataset files.
+  - Acceptance tests assert user-visible artifacts: run manifest, cleaned JSON, audit JSONL, Parquet metrics, HTML report, and regression pass/fail JSON.
+  - Drift guards scan source for forbidden patterns such as mocks, internal validation leakage, unpinned dependencies, and deprecated `supervision.ByteTrack`.
+
+## 5. Reuse and Performance Plan
+
+- ByteTrack MOT:
+  - Selected package: `trackers==2.6.0`, Apache-2.0, `ByteTrackTracker`.
+  - Rejected package: legacy `supervision.ByteTrack`; rejected because Supervision current docs deprecate it and direct users to `trackers`.
+  - Hot stage: `ByteTrackAssociationAdapter.associate_clip()`.
+  - Copy/serde removed: build frame tensors as NumPy views from `DetectionBlock`; do not create per-detection Python dicts for tracker input.
+  - Batching/concurrency: one tracker instance per clip; clip-level process pool bounded by `RuntimeConfig.max_clip_workers`.
+  - Backpressure: CLI waits on bounded process futures; no unbounded task submission.
+- Columnar analytics:
+  - Selected packages: `pyarrow==25.0.0`, `polars==1.43.2`.
+  - Rejected custom CSV metrics; rejected because CSV would force string parsing and weak schema tracking across experiments.
+  - Hot stage: metrics and regression over detections/tracks/decisions.
+  - Copy/serde removed: persisted Parquet is scanned lazily by Polars; JSONL is for audit humans and not used for metrics hot path.
+- Schemas and type safety:
+  - Selected package: `pydantic==2.13.4`.
+  - Rejected raw dict parsing; rejected because domain identity and validation state must be impossible to erase.
+  - Hot stage: no Pydantic models inside per-frame filter loops.
+- Visual artifacts:
+  - Selected packages: `opencv-python-headless==5.0.0.93`, `supervision==0.30.0`, `fiftyone==1.20.1`.
+  - Rejected custom annotation viewer in first delivery; rejected because static report plus FiftyOne gives stronger UX with less custom frontend risk.
+  - Hot stage: visual report is not adapter hot path. It decodes sampled frames only, from `SampleManifest`.
+- Observability:
+  - Selected packages: `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`.
+  - Hot stage: phase-level counters and histograms only. Per-detection decisions go to audit artifacts, not logs/spans.
+
+## 6. Second-Pass Audit
+
+- Deleted low-value features:
+  - Removed production streaming runtime from first implementation and kept only the reusable core contract plus architecture doc.
+  - Removed custom React workbench and retained static HTML/FiftyOne/Label Studio export paths.
+- Removed duplicate concepts:
+  - Collapsed separate run history, experiment history, and provenance stores into `RunArtifactStore` plus `RunManifest`.
+  - Collapsed separate tracker and temporal association concepts into `ByteTrackAssociationAdapter` followed by temporal false-positive filters.
+- Reused package/helper:
+  - ByteTrack association uses `trackers.ByteTrackTracker`.
+  - Annotation and detection containers use Supervision.
+  - Metrics tables use Arrow/Polars.
+- Reduced copy/serde:
+  - JSON parse occurs once at input boundary.
+  - Filter/tracker stages exchange NumPy/Arrow blocks.
+  - Metrics compare Parquet tables instead of reading audit JSONL.
+- Validation state:
+  - Untrusted input names are confined to `handdetect.io` and `handdetect.config`.
+  - Internal modules accept `Validated*` models or native columnar blocks only.
+- Boundary transfer:
+  - Public CLI passes typed config and ready handles into pipeline.
+  - External artifact formats are written only by audit/report/run store modules.
+- RAII/resource ownership:
+  - Dataset, run store, telemetry, video reader, and label store each have factory/context-manager ownership.
+- Test realism:
+  - Acceptance tests run public CLIs over real `data/` clips and assert real artifacts.
+  - No fake detector outputs are introduced.
+- Frontend re-render avoidance:
+  - No React frontend is added, so frontend render-state rules are avoided in first delivery.
+
+## Plan Files
+
+- [01-repo-dx-contracts.md](./01-repo-dx-contracts.md): repository scaffold, pinned dependencies, root task interface, typed domain contracts, config, observability constants.
+- [02-io-columnar-run-store.md](./02-io-columnar-run-store.md): dataset scanning, validation boundaries, columnar memory layout, run artifact store.
+- [03-bytetrack-adapter-and-filters.md](./03-bytetrack-adapter-and-filters.md): ByteTrack adapter, geometric filters, temporal filters, max-two selector, audit decisions.
+- [04-pipeline-experiments-provenance.md](./04-pipeline-experiments-provenance.md): state-machine orchestration, experiment matrices, immutable run provenance, bounded concurrency.
+- [05-evaluation-regression.md](./05-evaluation-regression.md): gold-label import, accuracy metrics, calibration sweeps, regression gates.
+- [06-reporting-review-workbench.md](./06-reporting-review-workbench.md): HTML report, visual overlays/contact sheets, FiftyOne/Label Studio exports, architecture docs.
