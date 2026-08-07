@@ -22,7 +22,7 @@ from handdetect_domain.config import AdapterConfig
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _run_smoke() -> tuple[str, str]:
+def _run_smoke() -> tuple[str, str, Path]:
     result = subprocess.run(
         ["python", "-m", "handdetect.cli.main", "run", "--config", "configs/smoke-experiment.toml"],
         cwd=ROOT,
@@ -33,12 +33,15 @@ def _run_smoke() -> tuple[str, str]:
     assert result.returncode == 0, result.stderr
     suite_id = result.stdout.split("suite_id=", 1)[1].split()[0]
     run_id = result.stdout.split("run_id=", 1)[1].split()[0]
-    return suite_id, run_id
+    report_path = Path(result.stdout.split("report=", 1)[1].splitlines()[0])
+    run_root = report_path.parent.parent
+    assert run_root.exists(), result.stdout
+    return suite_id, run_id, run_root
 
 
 def test_run_smoke_writes_cleaned_and_audit_artifacts() -> None:
-    suite_id, run_id = _run_smoke()
-    run_root = runs_root() / suite_id / run_id
+    suite_id, run_id, run_root = _run_smoke()
+    assert run_root == runs_root() / suite_id / run_id
     cleaned = sorted((run_root / "cleaned").glob("*.json"))
     audit = sorted((run_root / "audit").glob("*.jsonl"))
     assert cleaned
