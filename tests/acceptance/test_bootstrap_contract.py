@@ -32,6 +32,10 @@ def test_dockerfile_uses_build_commit_instead_of_runtime_git() -> None:
     assert "ARG HANDDETECT_BUILD_COMMIT" in dockerfile
     assert "HANDDETECT_BUILD_COMMIT=${HANDDETECT_BUILD_COMMIT}" in dockerfile
     assert "\n    git \\\n" not in dockerfile
+    assert "AS wheel-builder" in dockerfile
+    assert "pip wheel --wheel-dir /wheels /build" in dockerfile
+    assert "pip install --no-index --find-links=/wheels handdetect-quality" in dockerfile
+    assert "pip install -e" not in dockerfile
 
 
 def test_default_configs_route_runtime_state_to_tmp() -> None:
