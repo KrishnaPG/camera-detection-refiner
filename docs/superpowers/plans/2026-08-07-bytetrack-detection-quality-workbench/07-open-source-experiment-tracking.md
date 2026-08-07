@@ -1,5 +1,9 @@
 # Task 7: Open-Source Experiment Tracking, Queryable Regression History
 
+> **Package placement:** Apply `00-reusable-package-boundaries.md`. Paths below name logical
+> owners from the original module sketch; implement reusable code in `packages/*` and app wiring
+> in `apps/handdetect-cli` according to the normative path map.
+
 **Files:**
 - Create: `src/handdetect/tracking_platforms/interfaces.py`
 - Create: `src/handdetect/tracking_platforms/mlflow_tracker.py`

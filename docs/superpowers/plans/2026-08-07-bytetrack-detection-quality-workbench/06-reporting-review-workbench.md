@@ -1,5 +1,9 @@
 # Task 6: Static Report, Visual Review, Workbench Exports, Architecture Docs
 
+> **Package placement:** Apply `00-reusable-package-boundaries.md`. Paths below name logical
+> owners from the original module sketch; implement reusable code in `packages/*` and app wiring
+> in `apps/handdetect-cli` according to the normative path map.
+
 **Files:**
 - Create: `src/handdetect/report/static_report.py`
 - Create: `src/handdetect/report/sampling.py`

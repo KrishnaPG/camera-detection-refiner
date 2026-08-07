@@ -36,6 +36,8 @@
 - Tests enter through root tasks and public CLIs only. Tests must use the real downloaded dataset, generated run manifests, and production entrypoints; no mocks, monkeypatches, fake clients, fake stores, or hardcoded sample payloads.
 - Root task interface must expose `bootstrap`, `doctor`, `run`, `check`, `test`, `verify`, `seed`, `migrate`, and `clean`.
 - Custom React is not part of this first delivery. Static HTML/FiftyOne/Label Studio exports provide UX; if a React UI is added later it must follow `docs/coding-standards-frontend.md`.
+- `PACKAGE_BOUNDARIES.md` and `00-reusable-package-boundaries.md` are normative. Reusable logic must live in `packages/*`; `apps/handdetect-cli` may only wire public commands and re-export types for ergonomics.
+- Existing task snippets that reference `src/handdetect/...` are logical ownership references. Implementers must place reusable code in the package named by the normative path map and keep `apps/handdetect-cli` thin.
 - The code must strictly adhere to `docs/coding-standards.md`, `docs/coding-standards-frontend.md`, and `docs/coding-repo-standards.md`.
 
 ---
@@ -87,51 +89,78 @@
 
 ## 3. Structure Derived From Flow
 
-- First reusable pattern round:
-  - Typed boundary parser: `handdetect.io.parsers` validates external JSON/config/labels once and returns domain models.
-  - Run artifact store: `handdetect.runs.store` owns immutable output paths, atomic writes, manifests, and cleanup by `RunId`.
-  - Run catalog: `handdetect.runs.catalog` owns append-only run and metric history tables for cross-run queries.
-  - Columnar block: `handdetect.hotpath.columnar` owns NumPy/Arrow memory layout for detections, tracks, and decisions.
-  - Filter registry: `handdetect.filters.registry` maps typed `FilterName` to `FilterStrategy` without if/else chains.
-  - Tracker adapter: `handdetect.tracking.interfaces` isolates third-party MOT libraries behind typed native input/output shapes.
-  - Metrics registry: `handdetect.metrics.registry` centralizes metric names, counters, histograms, and report query ids.
-  - Experiment tracker adapters: `handdetect.tracking_platforms` isolates MLflow, DVC/DVCLive, and Evidently from domain logic.
-  - Lineage snapshot: `handdetect.lineage` binds DVC/Git/config/label/platform references into one replay lock without becoming a second artifact store.
-  - State-machine runner: `handdetect.pipeline.state_machine` owns job and clip phase transitions.
-- Second reusable pattern round:
-  - Experiment engine: `handdetect.experiments.runner` composes config, run store, pipeline, metrics, and regression gates into repeatable experiment suites.
-  - Review artifact builder: `handdetect.report` composes persisted tables and sample manifests into HTML/visual outputs.
-  - Label/evaluation workbench: `handdetect.eval` composes label imports, IoU matching, stage metrics, and calibration sweeps.
-  - Review journey bridge: `handdetect.review_journey` composes MLflow, DVC, Evidently, FiftyOne, Label Studio, and static report links into one operator-facing command.
-  - Replay workbench: `handdetect.workbench` exposes one-button local orchestration over lineage replay and platform links only.
-- Final module list:
-  - `handdetect.config`: typed runtime and experiment configuration.
-  - `handdetect.domain`: Pydantic domain models, branded ids, enums, constants.
-  - `handdetect.io`: dataset scanning and boundary parsing.
-  - `handdetect.hotpath`: NumPy/Arrow columnar blocks and vectorized geometry helpers.
-  - `handdetect.filters`: geometric and temporal false-positive filters.
-  - `handdetect.tracking`: ByteTrack adapter and tracker interfaces.
-  - `handdetect.selection`: max-two final hand selection.
-  - `handdetect.audit`: decision ledger and cleaned detection writer.
-  - `handdetect.pipeline`: state-machine orchestration and bounded clip execution.
-  - `handdetect.runs`: immutable run store, provenance, manifests, and cleanup.
-  - `handdetect.tracking_platforms`: open-source experiment tracking adapters for MLflow, DVC/DVCLive, and Evidently.
-  - `handdetect.experiments`: experiment matrix execution and comparison.
-  - `handdetect.eval`: labels, IoU matching, accuracy metrics, calibration sweeps.
-  - `handdetect.report`: static HTML, sampled overlays, FiftyOne export.
-  - `handdetect.review_journey`: public review launcher and platform URL/status manifest.
-  - `handdetect.lineage`: label freezing, lineage capture, isolated restore, and replay orchestration.
-  - `handdetect.workbench`: local FastAPI orchestration UI for run selection and replay.
-  - `handdetect.regression`: baseline comparison and pass/fail gates.
-  - `handdetect.cli`: public Typer commands only.
+- Reusable extraction round 1 creates primitive standalone packages:
+  - `dq-contracts`: branded ids, enums, status values, and error code contracts.
+  - `dq-boundaries`: Raw/Untrusted to Validated parsing, config parsing, canonicalization,
+    and hash computation.
+  - `dq-resources`: ready handles, provider injection, path builders, command runners,
+    clocks, id providers, and resource cleanup ownership.
+  - `dq-observability`: metric names, log keys, OTel phase constants, telemetry handles,
+    and non-blocking exporter status.
+  - `vision-columnar`: NumPy/Arrow detection, track, and decision blocks plus scratch buffers.
+  - `vision-geometry`: XYXY boxes, IoU, area/aspect helpers, overlap groups, border proximity,
+    and vectorized frame geometry.
+  - `mot-interfaces`: tracker protocols, native input/output shapes, and lifecycle events.
+  - `decision-ledger`: kept/merged/rejected/interpolated schemas, audit writers, and reason
+    registries.
+  - `run-artifacts`: immutable run roots, manifests, atomic writes, append-only Parquet
+    indexes, file locks, and cleanup by run id.
+  - `label-versions`: immutable label-set manifests, annotation canonicalization, label-set
+    hashing, and DVC add hooks.
+  - `experiment-tracking`: MLflow, DVC/DVCLive, Evidently adapters, and export status.
+  - `platform-review`: FiftyOne and Label Studio bridges plus review platform manifests.
+- Reusable extraction round 2 creates composites from round 1:
+  - `mot-bytetrack`: ByteTrack adapter over `mot-interfaces` and `vision-columnar`.
+  - `dq-filter-kit`: reusable filter registries and generic false-positive strategy hooks.
+  - `experiment-runner`: suite state machines, bounded execution, run storage, and tracking.
+  - `evaluation-regression`: label matching, metrics, calibration, history scans, and gates.
+  - `visual-reporting`: sampled overlays, contact sheets, and static report fragments.
+  - `review-journey`: one-command platform hub over tracking and review bridges.
+  - `lineage-replay`: replay locks, DVC/Git refs, isolated worktrees, and typed overrides.
+- Reusable extraction round 3 creates the final product-shell package:
+  - `replay-workbench`: local FastAPI orchestration UI over lineage replay and platform links.
+  - No generic `detector-quality-workbench` package is created in this delivery because only
+    the hand-detection app consumes the composition today.
+- Fixed point:
+  - No additional reusable packages remain after `replay-workbench`.
+  - Remaining domain modules are specific to ZED/WiLoR/VIO data or hand behavior.
+- Final reusable package list:
+  - `dq-contracts`
+  - `dq-boundaries`
+  - `dq-resources`
+  - `dq-observability`
+  - `vision-columnar`
+  - `vision-geometry`
+  - `mot-interfaces`
+  - `mot-bytetrack`
+  - `dq-filter-kit`
+  - `decision-ledger`
+  - `run-artifacts`
+  - `label-versions`
+  - `experiment-tracking`
+  - `experiment-runner`
+  - `evaluation-regression`
+  - `visual-reporting`
+  - `platform-review`
+  - `review-journey`
+  - `lineage-replay`
+  - `replay-workbench`
+- Final domain/business module list:
+  - `handdetect-domain`: hand-specific policy ids, constants, config, and report vocabulary.
+  - `handdetect-io`: this assignment's ZED/WiLoR/VIO JSON/video layout and metadata parser.
+  - `handdetect-policies`: hand-specific thresholds, max-two selection, lower-border exit
+    assumptions, and false-positive-only first-delivery policy.
+  - `apps/handdetect-cli`: Typer commands, config presets, Makefile-visible entrypoints, and
+    app-specific wiring only.
 - Module ownership rules:
-  - `handdetect.domain` owns type names and enums; it never reads files or runs algorithms.
-  - `handdetect.io` owns untrusted data validation; it never filters detections or writes run artifacts.
-  - `handdetect.hotpath` owns memory layout; it never knows filesystem paths or experiment ids.
-  - `handdetect.tracking` owns ByteTrack integration; it never decides false-positive policy beyond tracker association.
-  - `handdetect.filters` owns decision policies; it never writes JSON/Parquet.
-  - `handdetect.pipeline` owns state transitions; it never parses raw JSON or formats reports.
-  - `handdetect.report` owns reviewer artifacts; it never changes cleaned detections.
+  - Reusable packages must never import `handdetect-domain`, `handdetect-io`,
+    `handdetect-policies`, or `handdetect`.
+  - Domain packages may import reusable packages and may not duplicate their implementations.
+  - `apps/handdetect-cli` may import every package but must not implement algorithms, parsers,
+    storage, tracking, review bridges, lineage replay, metrics, or reporting.
+  - Existing `src/handdetect/...` references in task snippets are logical references; the
+    normative implementation path is the package map in
+    `00-reusable-package-boundaries.md`.
 
 ## 4. Validation, Resource Lifetime, Boundary Transfer, and Test Plan
 
@@ -225,6 +254,8 @@
   - Metrics tables use Arrow/Polars.
   - Experiment tracking uses MLflow, DVC/DVCLive, and Evidently instead of a custom dashboard/database.
   - Exact replay uses DVC/Git worktrees instead of a custom lineage database.
+  - Reusable implementation boundaries are now standalone `packages/*` packages instead of
+    duplicated `handdetect.*` modules.
 - Reduced copy/serde:
   - JSON parse occurs once at input boundary.
   - Filter/tracker stages exchange NumPy/Arrow blocks.
@@ -246,6 +277,7 @@
 
 ## Plan Files
 
+- [00-reusable-package-boundaries.md](./00-reusable-package-boundaries.md): fixed-point reusable pattern extraction, final package list, domain module list, and package-boundary drift guard.
 - [01-repo-dx-contracts.md](./01-repo-dx-contracts.md): repository scaffold, pinned dependencies, root task interface, typed domain contracts, config, observability constants.
 - [02-io-columnar-run-store.md](./02-io-columnar-run-store.md): dataset scanning, validation boundaries, columnar memory layout, run artifact store.
 - [03-bytetrack-adapter-and-filters.md](./03-bytetrack-adapter-and-filters.md): ByteTrack adapter, geometric filters, temporal filters, max-two selector, audit decisions.

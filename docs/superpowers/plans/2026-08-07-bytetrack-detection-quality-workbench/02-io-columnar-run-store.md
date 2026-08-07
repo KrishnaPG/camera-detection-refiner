@@ -1,5 +1,9 @@
 # Task 2: Dataset IO, Columnar Blocks, Run Artifact Store
 
+> **Package placement:** Apply `00-reusable-package-boundaries.md`. Paths below name logical
+> owners from the original module sketch; implement reusable code in `packages/*` and app wiring
+> in `apps/handdetect-cli` according to the normative path map.
+
 **Files:**
 - Create: `src/handdetect/io/dataset.py`
 - Create: `src/handdetect/io/parsers.py`

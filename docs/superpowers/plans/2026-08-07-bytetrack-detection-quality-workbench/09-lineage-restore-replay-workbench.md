@@ -1,5 +1,9 @@
 # Task 9: Lineage Restore, Replay, and One-Button Regression Workbench
 
+> **Package placement:** Apply `00-reusable-package-boundaries.md`. Paths below name logical
+> owners from the original module sketch; implement reusable code in `packages/*` and app wiring
+> in `apps/handdetect-cli` according to the normative path map.
+
 **Files:**
 - Create: `dvc.yaml`
 - Create: `params.yaml`

@@ -4,25 +4,25 @@
 - Create: `pyproject.toml`
 - Create: `Makefile`
 - Create: `.env.example`
-- Create: `src/handdetect/__init__.py`
-- Create: `src/handdetect/domain/ids.py`
-- Create: `src/handdetect/domain/enums.py`
-- Create: `src/handdetect/domain/constants.py`
-- Create: `src/handdetect/domain/models.py`
-- Create: `src/handdetect/config/models.py`
-- Create: `src/handdetect/config/parser.py`
-- Create: `src/handdetect/observability/names.py`
-- Create: `src/handdetect/cli/main.py`
+- Create: `packages/dq-contracts/src/dq_contracts/ids.py`
+- Create: `packages/dq-contracts/src/dq_contracts/enums.py`
+- Create: `packages/dq-contracts/src/dq_contracts/models.py`
+- Create: `packages/dq-boundaries/src/dq_boundaries/config.py`
+- Create: `packages/dq-observability/src/dq_observability/names.py`
+- Create: `packages/handdetect-domain/src/handdetect_domain/constants.py`
+- Create: `packages/handdetect-domain/src/handdetect_domain/config.py`
+- Create: `apps/handdetect-cli/src/handdetect/cli/main.py`
 - Create: `tests/acceptance/test_cli_contract.py`
 
 **Interfaces:**
 - Produces:
-  - `ClipId`, `RunId`, `ExperimentId`, `DetectionId`, `TrackId`, `FrameIndex`, `TimestampNs` in `handdetect.domain.ids`.
-  - `DetectionDecision`, `RejectReason`, `PipelinePhase`, `RunState`, `RunEvent`, `FilterName` in `handdetect.domain.enums`.
-  - `AdapterConfig`, `RuntimeConfig`, `ExperimentConfig`, `ValidatedExperimentConfig` in `handdetect.config.models`.
-  - `ExperimentConfigParser.parse_path(path: Path) -> ValidatedExperimentConfig`.
+  - `ClipId`, `RunId`, `ExperimentId`, `DetectionId`, `TrackId`, `FrameIndex`, `TimestampNs` in `dq_contracts.ids`.
+  - `DetectionDecision`, `RejectReason`, `PipelinePhase`, `RunState`, `RunEvent`, `FilterName` in `dq_contracts.enums`.
+  - `AdapterConfig`, `RuntimeConfig`, `ExperimentConfig`, `ValidatedExperimentConfig` in `handdetect_domain.config`.
+  - `ExperimentConfigParser.parse_path(path: Path) -> ValidatedExperimentConfig` in `dq_boundaries.config`.
   - CLI command group `handdetect` with `doctor`, `seed`, `run`, `check`, `test`, `verify`, `migrate`, `clean`.
 - Consumes:
+  - Package boundaries from `00-reusable-package-boundaries.md`.
   - Existing assignment data under `data/`.
   - Standards under `docs/coding-*.md`.
 
@@ -135,7 +135,32 @@ dev = [
 handdetect = "handdetect.cli.main:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/handdetect"]
+packages = [
+  "apps/handdetect-cli/src/handdetect",
+  "packages/dq-contracts/src/dq_contracts",
+  "packages/dq-boundaries/src/dq_boundaries",
+  "packages/dq-resources/src/dq_resources",
+  "packages/dq-observability/src/dq_observability",
+  "packages/vision-columnar/src/vision_columnar",
+  "packages/vision-geometry/src/vision_geometry",
+  "packages/mot-interfaces/src/mot_interfaces",
+  "packages/mot-bytetrack/src/mot_bytetrack",
+  "packages/dq-filter-kit/src/dq_filter_kit",
+  "packages/decision-ledger/src/decision_ledger",
+  "packages/run-artifacts/src/run_artifacts",
+  "packages/label-versions/src/label_versions",
+  "packages/experiment-tracking/src/experiment_tracking",
+  "packages/experiment-runner/src/experiment_runner",
+  "packages/evaluation-regression/src/evaluation_regression",
+  "packages/visual-reporting/src/visual_reporting",
+  "packages/platform-review/src/platform_review",
+  "packages/review-journey/src/review_journey",
+  "packages/lineage-replay/src/lineage_replay",
+  "packages/replay-workbench/src/replay_workbench",
+  "packages/handdetect-domain/src/handdetect_domain",
+  "packages/handdetect-io/src/handdetect_io",
+  "packages/handdetect-policies/src/handdetect_policies",
+]
 
 [tool.ruff]
 line-length = 100
@@ -174,9 +199,9 @@ run:
 	$(PYTHON) -m handdetect.cli.main run --config configs/default-experiments.toml
 
 check:
-	$(PYTHON) -m ruff format --check src tests
-	$(PYTHON) -m ruff check src tests
-	$(PYTHON) -m mypy src
+	$(PYTHON) -m ruff format --check packages apps tests
+	$(PYTHON) -m ruff check packages apps tests
+	$(PYTHON) -m mypy packages apps
 
 test:
 	$(PYTHON) -m pytest tests/acceptance -v
@@ -204,7 +229,7 @@ HANDDETECT_OTEL_EXPORTER=none
 
 - [ ] **Step 5: Create domain ids, enums, and constants**
 
-Create `src/handdetect/domain/ids.py`:
+Create `packages/dq-contracts/src/dq_contracts/ids.py`:
 
 ```python
 from __future__ import annotations
@@ -223,7 +248,7 @@ FrameIndex = NewType("FrameIndex", int)
 TimestampNs = NewType("TimestampNs", int)
 ```
 
-Create `src/handdetect/domain/enums.py`:
+Create `packages/dq-contracts/src/dq_contracts/enums.py`:
 
 ```python
 from __future__ import annotations
@@ -297,7 +322,7 @@ class RunEvent(StrEnum):
     CANCEL_REQUESTED = "cancel_requested"
 ```
 
-Create `src/handdetect/domain/constants.py`:
+Create `packages/handdetect-domain/src/handdetect_domain/constants.py`:
 
 ```python
 from __future__ import annotations
@@ -314,7 +339,7 @@ PARQUET_SUFFIX = ".parquet"
 
 - [ ] **Step 6: Create Pydantic domain and config models**
 
-Create `src/handdetect/domain/models.py`:
+Create `packages/dq-contracts/src/dq_contracts/models.py`:
 
 ```python
 from __future__ import annotations
@@ -323,8 +348,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from handdetect.domain.enums import DetectionDecision, FilterName, RejectReason
-from handdetect.domain.ids import ClipId, DetectionId, FrameIndex, RunId, TimestampNs, TrackId
+from dq_contracts.enums import DetectionDecision, FilterName, RejectReason
+from dq_contracts.ids import ClipId, DetectionId, FrameIndex, RunId, TimestampNs, TrackId
 
 
 class BoxXYXY(BaseModel):
@@ -374,7 +399,7 @@ class DetectionDecisionRecord(BaseModel):
     timestamp_ns: TimestampNs
 ```
 
-Create `src/handdetect/config/models.py`:
+Create `packages/handdetect-domain/src/handdetect_domain/config.py`:
 
 ```python
 from __future__ import annotations
@@ -434,7 +459,7 @@ class ValidatedExperimentConfig(BaseModel):
     experiments: tuple[ExperimentConfig, ...]
 ```
 
-Create `src/handdetect/config/parser.py`:
+Create `packages/dq-boundaries/src/dq_boundaries/config.py`:
 
 ```python
 from __future__ import annotations
@@ -444,7 +469,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from handdetect.config.models import ValidatedExperimentConfig
+from handdetect_domain.config import ValidatedExperimentConfig
 
 
 class ConfigParseError(RuntimeError):
@@ -465,7 +490,7 @@ class ExperimentConfigParser:
 
 - [ ] **Step 7: Create CLI shell with public commands**
 
-Create `src/handdetect/observability/names.py`:
+Create `packages/dq-observability/src/dq_observability/names.py`:
 
 ```python
 from __future__ import annotations
@@ -478,7 +503,7 @@ METRIC_RUNS_FAILED = "handdetect_runs_failed_total"
 METRIC_CLIP_SECONDS = "handdetect_clip_processing_seconds"
 ```
 
-Create `src/handdetect/__init__.py`:
+Create `apps/handdetect-cli/src/handdetect/__init__.py`:
 
 ```python
 from __future__ import annotations
@@ -488,7 +513,7 @@ __all__ = ["__version__"]
 __version__ = "0.1.0"
 ```
 
-Create `src/handdetect/cli/main.py`:
+Create `apps/handdetect-cli/src/handdetect/cli/main.py`:
 
 ```python
 from __future__ import annotations
@@ -562,6 +587,6 @@ Expected:
 Commit:
 
 ```bash
-git add pyproject.toml Makefile .env.example src/handdetect tests/acceptance/test_cli_contract.py
+git add pyproject.toml Makefile .env.example packages apps tests/acceptance/test_cli_contract.py
 git commit -m "chore: add handdetect repo contract"
 ```
