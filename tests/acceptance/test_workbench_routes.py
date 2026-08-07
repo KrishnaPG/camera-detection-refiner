@@ -14,6 +14,7 @@ def test_workbench_index_renders_operator_entrypoints(monkeypatch, tmp_path) -> 
     assert "http://localhost:8000" in response.text
     assert "http://localhost:5000" in response.text
     assert "http://localhost:5151" in response.text
+    assert "http://localhost:8080" in response.text
     assert "Run Smoke Experiment" in response.text
 
 
