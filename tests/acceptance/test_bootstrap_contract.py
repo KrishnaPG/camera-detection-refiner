@@ -193,10 +193,12 @@ def test_compose_prepares_tmp_state_then_drops_to_host_uid() -> None:
     assert "HANDDETECT_COMPOSE_UID" in compose
     assert "HANDDETECT_COMPOSE_GID" in compose
     assert "chown -R" in compose
+    assert 'chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect' in compose
     assert (
         'chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect'
         not in compose
     )
+    assert "/tmp/handdetect/replays" in compose
     assert "USER=handdetect" in compose
     assert "LOGNAME=handdetect" in compose
     assert "setpriv --reuid" in compose

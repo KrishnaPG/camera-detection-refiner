@@ -70,6 +70,18 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
     assert "Replay With Override" in response.text
 
 
+def test_workbench_run_detail_reports_missing_run(monkeypatch, tmp_path) -> None:
+    suite_id = "suite-20260807-missing"
+    run_id = "run-20260807-missing"
+    monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(tmp_path / "runs"))
+    monkeypatch.chdir(tmp_path)
+
+    response = TestClient(create_app()).get(f"/runs/{suite_id}/{run_id}")
+
+    assert response.status_code == 404
+    assert f"Run not found for {suite_id}/{run_id}" in response.text
+
+
 def test_workbench_artifact_route_reports_missing_file(monkeypatch, tmp_path) -> None:
     suite_id = "suite-20260807-000002"
     run_id = "run-20260807-000002"

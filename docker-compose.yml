@@ -10,7 +10,8 @@ services:
       - bash
       - -lc
       - |
-        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/runs /tmp/handdetect/evidently /tmp/handdetect/workbench
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/runs /tmp/handdetect/evidently /tmp/handdetect/workbench /tmp/handdetect/replays
+        chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
         chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
           /tmp/handdetect/home \
           /tmp/handdetect/cache \
@@ -18,7 +19,8 @@ services:
           /tmp/handdetect/dvclive \
           /tmp/handdetect/runs \
           /tmp/handdetect/evidently \
-          /tmp/handdetect/workbench
+          /tmp/handdetect/workbench \
+          /tmp/handdetect/replays
         export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
         exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
           python -m handdetect.cli.main workbench serve --host 0.0.0.0 --port 8000
@@ -52,6 +54,7 @@ services:
       - -lc
       - |
         mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns
+        chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
         chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
           /tmp/handdetect/home \
           /tmp/handdetect/cache \

@@ -84,12 +84,10 @@ def create_app() -> FastAPI:
     @app.get("/runs/{suite_id}/{run_id}", response_class=HTMLResponse)
     def run_detail(request: Request, suite_id: str, run_id: str) -> HTMLResponse:
         run_root = runs_root() / suite_id / run_id
-        manifest = json.loads((run_root / "run-manifest.json").read_text(encoding="utf-8"))
-        evaluation = json.loads((run_root / "evaluation.json").read_text(encoding="utf-8"))
-        regression = json.loads((run_root / "regression.json").read_text(encoding="utf-8"))
-        tracking = json.loads(
-            (run_root / "tracking_export_status.json").read_text(encoding="utf-8")
-        )
+        manifest = read_required_run_json(run_root, "run-manifest.json", suite_id, run_id)
+        evaluation = read_required_run_json(run_root, "evaluation.json", suite_id, run_id)
+        regression = read_required_run_json(run_root, "regression.json", suite_id, run_id)
+        tracking = read_required_run_json(run_root, "tracking_export_status.json", suite_id, run_id)
         platforms = {}
         platforms_path = run_root / "review" / "platforms.json"
         if platforms_path.exists():
@@ -131,6 +129,18 @@ def create_app() -> FastAPI:
         return FileResponse(target)
 
     return app
+
+
+def read_required_run_json(
+    run_root: Path, relative_path: str, suite_id: str, run_id: str
+) -> object:
+    target = run_root / relative_path
+    if not target.exists() or not target.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Run not found for {suite_id}/{run_id}: missing {relative_path}",
+        )
+    return json.loads(target.read_text(encoding="utf-8"))
 
 
 def serve(host: str, port: int) -> None:
