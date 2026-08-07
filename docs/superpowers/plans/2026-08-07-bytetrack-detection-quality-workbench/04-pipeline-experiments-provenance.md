@@ -17,8 +17,9 @@
   - ByteTrack/filter/selector/audit modules from Task 3.
 - Produces:
   - `ClipRunner.run_clip(paths: ValidatedClipPathSet, run_id: RunId, experiment: ExperimentConfig, store: RunArtifactStore) -> ClipRunSummary`.
-  - `ExperimentRunner.run(config: ValidatedExperimentConfig) -> RunManifest`.
+  - `ExperimentRunner.run(config: ValidatedExperimentConfig) -> RunSuiteManifest`.
   - Immutable run manifests and per-experiment provenance.
+  - Append-only run index rows that allow repeated identical configs without overwriting prior outputs.
 
 - [ ] **Step 1: Write failing experiment acceptance test**
 
@@ -44,14 +45,41 @@ def test_smoke_experiment_records_provenance_and_metrics() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+    suite_id = result.stdout.split("suite_id=", 1)[1].split()[0]
     run_id = result.stdout.split("run_id=", 1)[1].split()[0]
-    manifest_path = ROOT / "runs" / run_id / "run-manifest.json"
-    metrics_path = ROOT / "runs" / run_id / "tables" / "clip_metrics.parquet"
+    manifest_path = ROOT / "runs" / suite_id / run_id / "run-manifest.json"
+    metrics_path = ROOT / "runs" / suite_id / run_id / "tables" / "clip_metrics.parquet"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["experiment_id"] == "smoke"
     assert manifest["code_version"]
     assert manifest["config_sha256"]
+    assert manifest["run_suite_id"] == suite_id
     assert metrics_path.exists()
+
+
+def test_repeated_smoke_runs_do_not_overwrite_outputs() -> None:
+    first = subprocess.run(
+        ["python", "-m", "handdetect.cli.main", "run", "--config", "configs/smoke-experiment.toml"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    second = subprocess.run(
+        ["python", "-m", "handdetect.cli.main", "run", "--config", "configs/smoke-experiment.toml"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    first_suite = first.stdout.split("suite_id=", 1)[1].split()[0]
+    second_suite = second.stdout.split("suite_id=", 1)[1].split()[0]
+    assert first_suite != second_suite
+    assert (ROOT / "runs" / first_suite).exists()
+    assert (ROOT / "runs" / second_suite).exists()
+    assert (ROOT / "runs" / "index" / "run_index.parquet").exists()
 ```
 
 - [ ] **Step 2: Add experiment configs**
@@ -63,6 +91,9 @@ Create `configs/smoke-experiment.toml`:
 data_root = "data"
 runs_root = "runs"
 max_clip_workers = 1
+mlflow_tracking_uri = "mlruns"
+dvclive_root = "dvclive"
+evidently_root = "runs/evidently"
 
 [[experiments]]
 name = "smoke"
@@ -102,6 +133,9 @@ Create `configs/default-experiments.toml` with three experiments:
 data_root = "data"
 runs_root = "runs"
 max_clip_workers = 4
+mlflow_tracking_uri = "mlruns"
+dvclive_root = "dvclive"
+evidently_root = "runs/evidently"
 
 [[experiments]]
 name = "baseline_geometry_tracking_temporal"
@@ -222,18 +256,29 @@ import pyarrow.parquet as pq
 from handdetect.audit.ledger import DecisionLedgerBuilder
 from handdetect.config.models import ExperimentConfig
 from handdetect.domain.ids import RunId
+from handdetect.domain.models import ValidatedClipPathSet
 from handdetect.filters.geometric import GeometricFilterPipeline
 from handdetect.filters.temporal import TemporalFilterPipeline
 from handdetect.hotpath.columnar import ClipColumnBuilder
 from handdetect.io.parsers import JsonBoundaryParser
-from handdetect.domain.models import ValidatedClipPathSet
 from handdetect.runs.store import RunArtifactStore
 from handdetect.selection.max_two import MaxTwoSelector
 from handdetect.tracking.bytetrack import ByteTrackAssociationAdapter
+from pydantic import BaseModel, ConfigDict
+
+
+class ClipRunSummary(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    run_id: str
+    clip_id: str
+    interpolated_detection_count: int
+    max_detections_per_frame: int
+    selected_detection_count: int
 
 
 class ClipRunner:
-    def run_clip(self, paths: ValidatedClipPathSet, run_id: RunId, experiment: ExperimentConfig, store: RunArtifactStore) -> dict[str, object]:
+    def run_clip(self, paths: ValidatedClipPathSet, run_id: RunId, experiment: ExperimentConfig, store: RunArtifactStore) -> ClipRunSummary:
         bundle = JsonBoundaryParser().parse_clip(paths)
         block = ClipColumnBuilder().build(bundle)
         geometric = GeometricFilterPipeline().run(block, experiment.adapter)
@@ -243,14 +288,14 @@ class ClipRunner:
         decisions = DecisionLedgerBuilder().build(run_id, block, geometric, selected)
         cleaned_path = store.cleaned_dir / f"{paths.clip_id}.json"
         audit_path = store.audit_dir / f"{paths.clip_id}.jsonl"
-        cleaned_payload = {
-            "run_id": str(run_id),
-            "clip_id": str(paths.clip_id),
-            "interpolated_detection_count": 0,
-            "max_detections_per_frame": 2,
-            "selected_detection_count": int(selected.selected_mask.sum()),
-        }
-        cleaned_path.write_text(json.dumps(cleaned_payload, indent=2), encoding="utf-8")
+        cleaned_payload = ClipRunSummary(
+            run_id=str(run_id),
+            clip_id=str(paths.clip_id),
+            interpolated_detection_count=0,
+            max_detections_per_frame=2,
+            selected_detection_count=int(selected.selected_mask.sum()),
+        )
+        cleaned_path.write_text(cleaned_payload.model_dump_json(indent=2), encoding="utf-8")
         audit_path.write_text("\n".join(record.model_dump_json() for record in decisions), encoding="utf-8")
         table = pa.table(
             {
@@ -261,6 +306,7 @@ class ClipRunner:
             }
         )
         pq.write_table(table, store.tables_dir / f"clip_metrics_{paths.clip_id}.parquet")
+        pq.write_table(table, store.tables_dir / "clip_metrics.parquet")
         return cleaned_payload
 ```
 
@@ -272,35 +318,38 @@ from __future__ import annotations
 import hashlib
 import json
 
-import pyarrow.parquet as pq
-
 from handdetect.config.models import ValidatedExperimentConfig
-from handdetect.domain.ids import ExperimentId
+from handdetect.domain.ids import ExperimentId, RunSuiteId
 from handdetect.io.dataset import DatasetScanner
 from handdetect.pipeline.clip_runner import ClipRunner
-from handdetect.runs.ids import DeterministicRunIdProvider
+from handdetect.runs.ids import RunIdProvider
+from handdetect.runs.manifest import RunIndexRow
+from handdetect.runs.catalog import RunCatalog
 from handdetect.runs.store import RunArtifactStore
 
 
 class ExperimentRunner:
-    def run(self, config: ValidatedExperimentConfig) -> list[str]:
+    def run(self, config: ValidatedExperimentConfig, suite_id: RunSuiteId) -> list[str]:
         config_bytes = config.model_dump_json().encode("utf-8")
         config_hash = hashlib.sha256(config_bytes).hexdigest()
         clips = DatasetScanner().scan(config.runtime.data_root)
         run_ids: list[str] = []
+        catalog = RunCatalog.open(config.runtime.runs_root)
         for experiment in config.experiments:
-            run_id = DeterministicRunIdProvider().create(ExperimentId(experiment.name), config_bytes)
-            store = RunArtifactStore.open(config.runtime.runs_root, run_id)
+            run_id = RunIdProvider().create(suite_id, ExperimentId(experiment.name), config_hash)
+            store = RunArtifactStore.open(config.runtime.runs_root, suite_id, run_id)
             for paths in clips[:3] if experiment.name == "smoke" else clips:
                 ClipRunner().run_clip(paths, run_id, experiment, store)
-            manifest = {
-                "run_id": str(run_id),
-                "experiment_id": experiment.name,
-                "code_version": "0.1.0",
-                "config_sha256": config_hash,
-                "clip_count": 3 if experiment.name == "smoke" else len(clips),
-            }
-            (store.root / "run-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+            manifest = RunIndexRow(
+                run_id=run_id,
+                run_suite_id=suite_id,
+                experiment_id=ExperimentId(experiment.name),
+                code_version="0.1.0",
+                config_sha256=config_hash,
+                clip_count=3 if experiment.name == "smoke" else len(clips),
+            )
+            (store.root / "run-manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+            catalog.append_run(manifest)
             run_ids.append(str(run_id))
         return run_ids
 ```
@@ -325,6 +374,7 @@ Modify `src/handdetect/cli/main.py` top-level imports:
 ```python
 from handdetect.config.parser import ExperimentConfigParser
 from handdetect.experiments.runner import ExperimentRunner
+from handdetect.runs.ids import RunSuiteIdProvider
 ```
 
 Modify `src/handdetect/cli/main.py` `run()` command body:
@@ -333,9 +383,10 @@ Modify `src/handdetect/cli/main.py` `run()` command body:
 @app.command()
 def run(config: Path) -> None:
     parsed = ExperimentConfigParser().parse_path(config)
-    run_ids = ExperimentRunner().run(parsed)
+    suite_id = RunSuiteIdProvider().create()
+    run_ids = ExperimentRunner().run(parsed, suite_id)
     for run_id in run_ids:
-        typer.echo(f"handdetect run: run_id={run_id} report=runs/{run_id}/report/index.html")
+        typer.echo(f"handdetect run: suite_id={suite_id} run_id={run_id} report=runs/{suite_id}/{run_id}/report/index.html")
 ```
 
 - [ ] **Step 6: Run experiment acceptance tests and commit**

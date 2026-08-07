@@ -99,6 +99,7 @@ description = "ByteTrack-backed hand detection quality workbench"
 requires-python = "==3.12.*"
 dependencies = [
   "fiftyone==1.20.1",
+  "mlflow==3.15.1",
   "numpy==2.5.1",
   "opencv-python-headless==5.0.0.93",
   "opentelemetry-sdk==1.44.0",
@@ -110,6 +111,9 @@ dependencies = [
   "supervision==0.30.0",
   "trackers==2.6.0",
   "typer==0.27.1",
+  "dvc==3.67.1",
+  "dvclive==3.49.1",
+  "evidently==0.7.21",
 ]
 
 [project.optional-dependencies]
@@ -201,8 +205,11 @@ from __future__ import annotations
 from typing import NewType
 
 ClipId = NewType("ClipId", str)
+RunSuiteId = NewType("RunSuiteId", str)
 RunId = NewType("RunId", str)
 ExperimentId = NewType("ExperimentId", str)
+MlflowRunId = NewType("MlflowRunId", str)
+LabelSetId = NewType("LabelSetId", str)
 DetectionId = NewType("DetectionId", str)
 TrackId = NewType("TrackId", int)
 FrameIndex = NewType("FrameIndex", int)
@@ -399,6 +406,9 @@ class RuntimeConfig(BaseModel):
     data_root: Path
     runs_root: Path
     max_clip_workers: int = Field(ge=1)
+    mlflow_tracking_uri: str
+    dvclive_root: Path
+    evidently_root: Path
 
 
 class ExperimentConfig(BaseModel):
@@ -548,4 +558,3 @@ Commit:
 git add pyproject.toml Makefile .env.example src/handdetect tests/acceptance/test_cli_contract.py
 git commit -m "chore: add handdetect repo contract"
 ```
-

@@ -46,8 +46,9 @@ def test_run_writes_static_report_and_review_exports() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+    suite_id = result.stdout.split("suite_id=", 1)[1].split()[0]
     run_id = result.stdout.split("run_id=", 1)[1].split()[0]
-    run_root = ROOT / "runs" / run_id
+    run_root = ROOT / "runs" / suite_id / run_id
     report = run_root / "report" / "index.html"
     assert report.exists()
     html = report.read_text(encoding="utf-8")
@@ -256,4 +257,3 @@ Commit:
 git add src/handdetect/report src/handdetect/review src/handdetect/experiments/runner.py ARCHITECTURE.md EVALUATION.md tests/acceptance/test_report_artifacts.py
 git commit -m "feat: add review report workbench"
 ```
-

@@ -52,10 +52,13 @@ def test_run_smoke_writes_cleaned_and_audit_artifacts() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+    suite_marker = "suite_id="
     marker = "run_id="
+    assert suite_marker in result.stdout
     assert marker in result.stdout
+    suite_id = result.stdout.split(suite_marker, 1)[1].split()[0]
     run_id = result.stdout.split(marker, 1)[1].split()[0]
-    run_root = ROOT / "runs" / run_id
+    run_root = ROOT / "runs" / suite_id / run_id
     cleaned = sorted((run_root / "cleaned").glob("*.json"))
     audit = sorted((run_root / "audit").glob("*.jsonl"))
     assert cleaned
@@ -143,10 +146,17 @@ Create `src/handdetect/filters/registry.py`:
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Protocol
 
 from handdetect.domain.enums import FilterName
 
-FilterFactory = Callable[[], object]
+
+class FilterStrategy(Protocol):
+    def name(self) -> FilterName:
+        ...
+
+
+FilterFactory = Callable[[], FilterStrategy]
 
 
 class FilterRegistry:
@@ -158,7 +168,7 @@ class FilterRegistry:
             raise ValueError(f"filter already registered: {name}")
         self._factories[name] = factory
 
-    def create(self, name: FilterName) -> object:
+    def create(self, name: FilterName) -> FilterStrategy:
         try:
             return self._factories[name]()
         except KeyError as exc:
@@ -304,13 +314,14 @@ class ByteTrackAssociationAdapter(AssociationAdapter):
             lost_track_buffer=config.lost_track_buffer,
             frame_rate=config.frame_rate,
         )
+        scratch = ByteTrackTensorScratch(self._max_frame_candidates(block, geometric))
         source_indexes: list[int] = []
         track_ids: list[int] = []
         ages: list[int] = []
         scores: list[float] = []
         for frame in np.unique(block.frame_index):
             frame_indexes = np.flatnonzero((block.frame_index == frame) & geometric.candidate_mask)
-            tensor = self._frame_tensor(block, frame_indexes)
+            tensor = self._frame_tensor(block, frame_indexes, scratch)
             tracks = tracker.update(tensor)
             for track in tracks:
                 source_index = self._nearest_source_index(block, frame_indexes, np.asarray(track.tlbr, dtype=np.float32))
@@ -326,17 +337,30 @@ class ByteTrackAssociationAdapter(AssociationAdapter):
             track_score=np.asarray(scores, dtype=np.float32),
         )
 
-    def _frame_tensor(self, block: DetectionBlock, indexes: np.ndarray) -> np.ndarray:
-        xyxy = block.xyxy[indexes]
-        scores = block.confidence[indexes].reshape(-1, 1)
-        classes = np.full((indexes.shape[0], 1), BYTE_TRACK_CLASS_ID, dtype=np.float32)
-        return np.concatenate([xyxy, scores, classes], axis=1).astype(np.float32, copy=False)
+    def _max_frame_candidates(self, block: DetectionBlock, geometric: GeometricStageResult) -> int:
+        frame_counts = np.bincount(block.frame_index[geometric.candidate_mask])
+        return int(frame_counts.max(initial=1))
+
+    def _frame_tensor(self, block: DetectionBlock, indexes: np.ndarray, scratch: "ByteTrackTensorScratch") -> np.ndarray:
+        tensor = scratch.view(indexes.shape[0])
+        tensor[:, :4] = block.xyxy[indexes]
+        tensor[:, 4] = block.confidence[indexes]
+        tensor[:, 5] = BYTE_TRACK_CLASS_ID
+        return tensor
 
     def _nearest_source_index(self, block: DetectionBlock, indexes: np.ndarray, xyxy: np.ndarray) -> int:
         centers = (block.xyxy[indexes, :2] + block.xyxy[indexes, 2:]) * 0.5
         target = (xyxy[:2] + xyxy[2:]) * 0.5
         distances = np.sum((centers - target) ** 2, axis=1)
         return int(indexes[int(np.argmin(distances))])
+
+
+class ByteTrackTensorScratch:
+    def __init__(self, capacity: int) -> None:
+        self.array = np.empty((capacity, 6), dtype=np.float32)
+
+    def view(self, length: int) -> np.ndarray:
+        return self.array[:length]
 ```
 
 - [ ] **Step 6: Implement temporal filters and max-two selector**

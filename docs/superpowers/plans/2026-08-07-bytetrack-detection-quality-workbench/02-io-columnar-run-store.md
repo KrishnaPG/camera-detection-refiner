@@ -8,6 +8,7 @@
 - Create: `src/handdetect/runs/ids.py`
 - Create: `src/handdetect/runs/store.py`
 - Create: `src/handdetect/runs/manifest.py`
+- Create: `src/handdetect/runs/catalog.py`
 - Modify: `src/handdetect/cli/main.py`
 - Create: `tests/acceptance/test_seed_and_load.py`
 
@@ -19,7 +20,8 @@
   - `DatasetScanner.scan(data_root: Path) -> tuple[ValidatedClipPathSet, ...]`.
   - `JsonBoundaryParser.parse_clip(paths: ValidatedClipPathSet) -> ValidatedClipBundle`.
   - `ClipColumnBuilder.build(bundle: ValidatedClipBundle) -> DetectionBlock`.
-  - `RunArtifactStore.open(runs_root: Path, run_id: RunId) -> RunArtifactStore`.
+  - `RunArtifactStore.open(runs_root: Path, suite_id: RunSuiteId, run_id: RunId) -> RunArtifactStore`.
+  - `RunCatalog.open(runs_root: Path) -> RunCatalog`.
   - CLI `seed` writes a real seed manifest from downloaded dataset clips.
 
 - [ ] **Step 1: Write failing seed/load acceptance test**
@@ -130,7 +132,23 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from handdetect.domain.ids import ClipId
-from handdetect.domain.models import RawDetection, ValidatedClipPathSet
+from handdetect.domain.models import ValidatedClipPathSet
+
+
+class RawFrameDetection(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    xyxy: tuple[float, float, float, float]
+    confidence: float = Field(ge=0.0, le=1.0)
+    class_id: int = Field(alias="class")
+    handedness: str
+
+
+class RawFramePayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    frame: int = Field(ge=0)
+    detections: tuple[RawFrameDetection, ...] = ()
 
 
 class ValidatedHandBoxes(BaseModel):
@@ -140,7 +158,7 @@ class ValidatedHandBoxes(BaseModel):
     eye: str
     video_frame_count: int = Field(gt=0)
     total_detections: int = Field(ge=0)
-    frames: tuple[dict[str, object], ...]
+    frames: tuple[RawFramePayload, ...]
 
 
 class ValidatedFrameTimestamps(BaseModel):
@@ -260,27 +278,21 @@ class ClipColumnBuilder:
         rows: list[tuple[str, int, float, float, float, float, float, int, int]] = []
         frame_ts = bundle.frame_ts.frame_ts
         for frame_payload in bundle.hand_boxes.frames:
-            frame = int(frame_payload["frame"])
-            detections = frame_payload.get("detections", [])
-            if not isinstance(detections, list):
-                raise ValueError(f"invalid detections list in clip {bundle.paths.clip_id} frame {frame}")
+            frame = frame_payload.frame
+            detections = frame_payload.detections
             for ordinal, detection in enumerate(detections):
-                if not isinstance(detection, dict):
-                    raise ValueError(f"invalid detection object in clip {bundle.paths.clip_id} frame {frame}")
-                xyxy = detection["xyxy"]
-                if not isinstance(xyxy, list) or len(xyxy) != 4:
-                    raise ValueError(f"invalid xyxy in clip {bundle.paths.clip_id} frame {frame}")
+                xyxy = detection.xyxy
                 detection_id = f"{bundle.paths.clip_id}:{frame}:{ordinal}"
                 rows.append(
                     (
                         detection_id,
                         frame,
-                        float(xyxy[0]),
-                        float(xyxy[1]),
-                        float(xyxy[2]),
-                        float(xyxy[3]),
-                        float(detection["confidence"]),
-                        int(detection["class"]),
+                        xyxy[0],
+                        xyxy[1],
+                        xyxy[2],
+                        xyxy[3],
+                        detection.confidence,
+                        detection.class_id,
                         int(frame_ts[str(frame)]),
                     )
                 )
@@ -305,12 +317,21 @@ from __future__ import annotations
 
 import hashlib
 
-from handdetect.domain.ids import ExperimentId, RunId
+from datetime import UTC, datetime
+from pathlib import Path
+
+from handdetect.domain.ids import ExperimentId, RunId, RunSuiteId
 
 
-class DeterministicRunIdProvider:
-    def create(self, experiment_id: ExperimentId, config_bytes: bytes) -> RunId:
-        digest = hashlib.sha256(config_bytes).hexdigest()[:16]
+class RunSuiteIdProvider:
+    def create(self) -> RunSuiteId:
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        return RunSuiteId(f"suite-{timestamp}")
+
+
+class RunIdProvider:
+    def create(self, suite_id: RunSuiteId, experiment_id: ExperimentId, config_sha256: str) -> RunId:
+        digest = hashlib.sha256(f"{suite_id}:{experiment_id}:{config_sha256}".encode("utf-8")).hexdigest()[:16]
         return RunId(f"{experiment_id}-{digest}")
 ```
 
@@ -323,7 +344,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from handdetect.domain.ids import ClipId, ExperimentId, RunId
+from handdetect.domain.ids import ClipId, ExperimentId, RunId, RunSuiteId
 
 
 class SeedManifest(BaseModel):
@@ -339,11 +360,23 @@ class RunManifest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     run_id: RunId
+    run_suite_id: RunSuiteId
     experiment_id: ExperimentId
     data_root: Path
     output_root: Path
     clip_ids: tuple[ClipId, ...]
     config_sha256: str
+
+
+class RunIndexRow(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    run_id: RunId
+    run_suite_id: RunSuiteId
+    experiment_id: ExperimentId
+    code_version: str
+    config_sha256: str
+    clip_count: int
 ```
 
 Create `src/handdetect/runs/store.py`:
@@ -354,23 +387,26 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from handdetect.domain.ids import RunId
-from handdetect.runs.manifest import SeedManifest
+from handdetect.domain.ids import RunId, RunSuiteId
+from handdetect.runs.manifest import RunIndexRow, SeedManifest
 
 
 class RunArtifactStore:
-    def __init__(self, runs_root: Path, run_id: RunId) -> None:
+    def __init__(self, runs_root: Path, suite_id: RunSuiteId, run_id: RunId) -> None:
         self.runs_root = runs_root
+        self.suite_id = suite_id
         self.run_id = run_id
-        self.root = runs_root / str(run_id)
+        self.root = runs_root / str(suite_id) / str(run_id)
         self.audit_dir = self.root / "audit"
         self.cleaned_dir = self.root / "cleaned"
         self.tables_dir = self.root / "tables"
         self.report_dir = self.root / "report"
 
     @classmethod
-    def open(cls, runs_root: Path, run_id: RunId) -> "RunArtifactStore":
-        store = cls(runs_root, run_id)
+    def open(cls, runs_root: Path, suite_id: RunSuiteId, run_id: RunId) -> "RunArtifactStore":
+        store = cls(runs_root, suite_id, run_id)
+        if store.root.exists():
+            raise FileExistsError(f"run root already exists and will not be overwritten: {store.root}")
         for path in [store.audit_dir, store.cleaned_dir, store.tables_dir, store.report_dir]:
             path.mkdir(parents=True, exist_ok=True)
         return store
@@ -382,6 +418,54 @@ class SeedManifestWriter:
         temp_path = path.with_suffix(".tmp")
         temp_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
         temp_path.replace(path)
+```
+
+Create `src/handdetect/runs/catalog.py`:
+
+```python
+from __future__ import annotations
+
+import fcntl
+from contextlib import contextmanager
+from pathlib import Path
+from collections.abc import Iterator
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+
+class RunCatalog:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.index_dir = root / "index"
+        self.run_index_path = self.index_dir / "run_index.parquet"
+
+    @classmethod
+    def open(cls, runs_root: Path) -> "RunCatalog":
+        catalog = cls(runs_root)
+        catalog.index_dir.mkdir(parents=True, exist_ok=True)
+        return catalog
+
+    def append_run(self, manifest: RunIndexRow) -> None:
+        with self._locked():
+            values = manifest.model_dump(mode="json")
+            row = pa.table({key: [value] for key, value in values.items()})
+            if self.run_index_path.exists():
+                existing = pq.read_table(self.run_index_path)
+                row = pa.concat_tables([existing, row], promote_options="default")
+            temp_path = self.run_index_path.with_suffix(".tmp")
+            pq.write_table(row, temp_path)
+            temp_path.replace(self.run_index_path)
+
+    @contextmanager
+    def _locked(self) -> Iterator[None]:
+        lock_path = self.index_dir / "catalog.lock"
+        with lock_path.open("w", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 ```
 
 - [ ] **Step 6: Wire CLI seed to scanner**

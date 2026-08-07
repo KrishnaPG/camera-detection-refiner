@@ -4,9 +4,9 @@
 
 **Goal:** Build a production-shaped false-positive hand-detection quality workbench that cleans raw detector boxes with ByteTrack MOT, emits auditable corrected detections, supports repeatable experiments, and demonstrates accuracy with labeled and visual review artifacts.
 
-**Architecture:** The adapter is a library-first pipeline with typed boundary parsers, Arrow/NumPy hot-path buffers, a ByteTrack association adapter, pluggable false-positive filters, a deterministic run registry, and static review outputs. The CLI is the first public entrypoint; batch/API/streaming/edge wrappers must reuse the same `AdapterPipeline.run_clip()` core contract.
+**Architecture:** The adapter is a library-first pipeline with typed boundary parsers, Arrow/NumPy hot-path buffers, a ByteTrack association adapter, pluggable false-positive filters, immutable run storage, MLflow/DVC/Evidently experiment tracking, and static review outputs. The CLI is the first public entrypoint; batch/API/streaming/edge wrappers must reuse the same `AdapterPipeline.run_clip()` core contract.
 
-**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.5.1`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `opencv-python-headless==5.0.0.93`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==1.20.1`.
+**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.5.1`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `opencv-python-headless==5.0.0.93`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==1.20.1`.
 
 ## Global Constraints
 
@@ -14,10 +14,15 @@
 - False-negative interpolation is not implemented and every output run must report `interpolated_detection_count = 0`.
 - ByteTrack is mandatory for MOT association. Use `trackers==2.6.0`; use `supervision==0.30.0` only for detection containers and visual annotation helpers.
 - The legacy `supervision.ByteTrack` API is not allowed because current Supervision docs deprecate it in favor of the external `trackers` package.
-- Every run must be immutable and identified by `RunId`; every experiment must be identified by `ExperimentId`; every input clip must retain `ClipId` provenance from `meta.json`.
+- Every CLI invocation must create a new immutable `RunSuiteId`; every experiment inside that suite must create a new immutable `RunId`; rerunning the same config must never overwrite an earlier run.
+- Every experiment must be identified by `ExperimentId`; every input clip must retain `ClipId` provenance from `meta.json`.
+- MLflow tracking is mandatory for experiment parameters, scalar metrics, tags, and artifacts. The default tracking URI is local `mlruns/`; a typed config value may point to a remote MLflow server later.
+- DVC/DVCLive outputs are mandatory for git-friendly metrics and plots under `dvclive/<run_suite_id>/<run_id>/` so regression charts can be compared without reading custom report HTML.
+- Evidently reports are mandatory for evaluation/regression dashboards where label or metric tables exist; static HTML must link to Evidently artifacts instead of reimplementing those charts.
 - Core logic must not read environment variables, current time, filesystem, network, or random state directly. Public entrypoints create providers and ready handles.
 - Pydantic `model_validate` may appear only in boundary parsers for JSON/config/manifest/label imports.
 - Internal hot-path transfer is typed object -> NumPy view or Arrow table. Do not serialize to dict/JSON between internal modules.
+- Third-party tracker boundaries must use reusable typed scratch buffers when the package requires a native tensor shape; per-frame allocation, `np.concatenate()`, and per-detection Python dict construction are forbidden in the adapter hot path.
 - Video frames are decoded only for overlay/report generation. Adapter logic consumes detection/pose/timestamp arrays and must not decode video.
 - Files must remain under 450 LOC; functions under 50 LOC; all function parameters and returns must be annotated; `Any` is allowed only at a documented third-party boundary.
 - Tests enter through root tasks and public CLIs only. Tests must use the real downloaded dataset, generated run manifests, and production entrypoints; no mocks, monkeypatches, fake clients, fake stores, or hardcoded sample payloads.
@@ -30,11 +35,12 @@
 ## 1. Goal, Non-Goals, Delete List
 
 - Final user-visible outcome:
-  - `make run` executes the default experiment suite over `data/`, writes immutable run artifacts under `runs/<run_id>/`, and prints the run id plus report path.
-  - `runs/<run_id>/report/index.html` shows raw-vs-cleaned metrics, filter-stage deltas, visual before/after examples, regression status, and top error cases.
-  - `runs/<run_id>/cleaned/<clip_id>.json` contains corrected detections with at most two final hands per frame.
-  - `runs/<run_id>/audit/<clip_id>.jsonl` records every input detection as `kept`, `merged`, or `rejected` with stage, reason, source detection id, destination detection id when merged, track id when available, and provenance.
-  - `runs/<run_id>/tables/*.parquet` stores metrics, detections, tracks, and decisions for fast comparison across runs and experiments.
+  - `make run` executes the default experiment suite over `data/`, writes immutable run artifacts under `runs/<run_suite_id>/<run_id>/`, and prints the suite id, each run id, MLflow experiment URL/path, DVC metrics path, and report path.
+  - `runs/<run_suite_id>/<run_id>/report/index.html` shows raw-vs-cleaned metrics, filter-stage deltas, visual before/after examples, regression status, MLflow/DVC/Evidently links, and top error cases.
+  - `runs/<run_suite_id>/<run_id>/cleaned/<clip_id>.json` contains corrected detections with at most two final hands per frame.
+  - `runs/<run_suite_id>/<run_id>/audit/<clip_id>.jsonl` records every input detection as `kept`, `merged`, or `rejected` with stage, reason, source detection id, destination detection id when merged, track id when available, and provenance.
+  - `runs/<run_suite_id>/<run_id>/tables/*.parquet` stores metrics, detections, tracks, and decisions for fast comparison across runs and experiments.
+  - `runs/index/run_index.parquet` and `runs/index/metric_history.parquet` append one row per run and per metric so regressions can be queried by `RunSuiteId`, `RunId`, `ExperimentId`, config hash, git commit, dataset hash, label-set id, metric name, and metric value.
 - Non-goals:
   - Do not retrain WiLoR, YOLO, or any detector.
   - Do not implement false-negative interpolation.
@@ -44,7 +50,7 @@
 - Planned items removed because they do not directly serve the final outcome:
   - Removed DeepStream/GStreamer/Kafka/Flink runtime implementation; record them only in `ARCHITECTURE.md` as deployment targets after the CLI workbench proves the core.
   - Removed custom MOT code; ByteTrack owns association.
-  - Removed custom charting app; static HTML and FiftyOne export cover interview UX without adding frontend state complexity.
+  - Removed custom charting app; MLflow, DVC plots, Evidently, static HTML, and FiftyOne export cover interview UX without adding frontend state complexity.
   - Removed per-frame trace spans; phase-level metrics and sampled visual artifacts give observability without hot-path allocation pressure.
 
 ## 2. End-to-End Flow Map
@@ -59,17 +65,20 @@
 - `SelectedDetectionBlock` + all stage decisions -> `handdetect.audit.ledger.DecisionLedgerWriter` -> writes `audit/<clip_id>.jsonl`, `cleaned/<clip_id>.json`, and Arrow/Parquet tables -> output persisted artifacts plus `ClipRunSummary` -> validation happens on persistence read in regression/eval tasks only -> filesystem writes through `RunArtifactStore` ready handle -> clip-level parallelism with atomic temp-file rename -> serde at external artifact boundary only -> error path emits `HDQ_ARTIFACT_WRITE_FAILED`.
 - `RunArtifactStore` persisted tables + optional gold labels -> `handdetect.eval.metrics.EvaluationRunner` -> computes raw-vs-cleaned precision, recall guardrail, false positives per 1k frames, duplicate rate, over-cap frames, and per-stage deltas -> output `EvaluationSummary` and Parquet metrics -> validation of labels at label import boundary -> no network -> bounded clip-level parallelism -> Arrow/Polars lazy scans, no JSON hot path -> error path emits `HDQ_EVAL_FAILED`.
 - Run summaries + metrics + overlay samples -> `handdetect.report.static_report.StaticReportBuilder` and `handdetect.review.fiftyone_export.FiftyOneExporter` -> static HTML, CSS, frame contact sheets, optional overlay videos, and FiftyOne dataset export -> output reviewer UX artifacts -> revalidation of artifact manifests before report write -> video decode only in this stage -> bounded frame decoding by sample manifest -> frame copies limited to annotation output images/videos -> error path emits `HDQ_REPORT_FAILED`.
-- Current run metrics + baseline manifest -> `handdetect.regression.gates.RegressionGateRunner` -> compares configured thresholds and records pass/fail -> output `regression.json` and CLI exit code -> revalidates persisted current/baseline manifests -> no network -> no async -> Polars scans over Parquet, no JSON path -> error path emits `HDQ_REGRESSION_FAILED`.
+- `RunManifest` + `EvaluationSummary` + artifact paths -> `handdetect.tracking_platforms.mlflow_tracker.MlflowExperimentTracker` and `handdetect.tracking_platforms.dvc_tracker.DvcLiveTracker` -> logs parameters, metrics, tags, and artifact references to open-source experiment platforms -> output MLflow run id and DVC metrics/plots path -> tracking backend write through ready handle -> no hot-path async -> scalar metric logging only after clip/run aggregation -> error path emits `HDQ_TRACKING_EXPORT_FAILED` and does not delete run artifacts.
+- Current run metrics + baseline manifest + run history index -> `handdetect.regression.gates.RegressionGateRunner` -> compares configured thresholds and records pass/fail -> output `regression.json`, `metric_history.parquet`, Evidently regression report, and CLI exit code -> revalidates persisted current/baseline manifests -> no network unless MLflow tracking URI is remote -> no async -> Polars scans over Parquet, no JSON path -> error path emits `HDQ_REGRESSION_FAILED`.
 
 ## 3. Structure Derived From Flow
 
 - First reusable pattern round:
   - Typed boundary parser: `handdetect.io.parsers` validates external JSON/config/labels once and returns domain models.
   - Run artifact store: `handdetect.runs.store` owns immutable output paths, atomic writes, manifests, and cleanup by `RunId`.
+  - Run catalog: `handdetect.runs.catalog` owns append-only run and metric history tables for cross-run queries.
   - Columnar block: `handdetect.hotpath.columnar` owns NumPy/Arrow memory layout for detections, tracks, and decisions.
   - Filter registry: `handdetect.filters.registry` maps typed `FilterName` to `FilterStrategy` without if/else chains.
   - Tracker adapter: `handdetect.tracking.interfaces` isolates third-party MOT libraries behind typed native input/output shapes.
   - Metrics registry: `handdetect.metrics.registry` centralizes metric names, counters, histograms, and report query ids.
+  - Experiment tracker adapters: `handdetect.tracking_platforms` isolates MLflow, DVC/DVCLive, and Evidently from domain logic.
   - State-machine runner: `handdetect.pipeline.state_machine` owns job and clip phase transitions.
 - Second reusable pattern round:
   - Experiment engine: `handdetect.experiments.runner` composes config, run store, pipeline, metrics, and regression gates into repeatable experiment suites.
@@ -86,6 +95,7 @@
   - `handdetect.audit`: decision ledger and cleaned detection writer.
   - `handdetect.pipeline`: state-machine orchestration and bounded clip execution.
   - `handdetect.runs`: immutable run store, provenance, manifests, and cleanup.
+  - `handdetect.tracking_platforms`: open-source experiment tracking adapters for MLflow, DVC/DVCLive, and Evidently.
   - `handdetect.experiments`: experiment matrix execution and comparison.
   - `handdetect.eval`: labels, IoU matching, accuracy metrics, calibration sweeps.
   - `handdetect.report`: static HTML, sampled overlays, FiftyOne export.
@@ -118,6 +128,8 @@
   - Transition handlers own metrics, log context, artifact manifest updates, and cleanup of temp files.
 - RAII path:
   - `RunArtifactStore.open(config, clock, id_provider)` returns a ready handle with non-optional root paths.
+  - `RunCatalog.open(runs_root)` returns a ready handle for append-only `run_index.parquet` and `metric_history.parquet`; it must acquire a file lock before appending and release it in the same context manager.
+  - `ExperimentTrackingSession.open(config)` returns ready MLflow, DVC, and Evidently handles; remote tracking failures are logged and surfaced in `tracking_export_status.json` but must not mutate completed core artifacts.
   - `DatasetScanner.scan(data_root)` returns `ValidatedClipPathSet` values only after required data path checks pass.
   - `TelemetryHandle.open(config)` returns a ready handle whose exporter failures are non-blocking.
   - Factories use `contextlib.ExitStack` so temp directories and file handles are cleaned by the owner that acquired them.
@@ -125,6 +137,7 @@
   - `make seed` builds `runs/seed/seed-manifest.json` from real `data/` clip ids and records a small deterministic smoke subset.
   - `make test` runs public CLI acceptance tests against that seed manifest and real dataset files.
   - Acceptance tests assert user-visible artifacts: run manifest, cleaned JSON, audit JSONL, Parquet metrics, HTML report, and regression pass/fail JSON.
+  - Acceptance tests run the same smoke config twice and assert two distinct run ids, two distinct artifact roots, two MLflow runs, and at least two rows in `runs/index/run_index.parquet`.
   - Drift guards scan source for forbidden patterns such as mocks, internal validation leakage, unpinned dependencies, and deprecated `supervision.ByteTrack`.
 
 ## 5. Reuse and Performance Plan
@@ -133,7 +146,8 @@
   - Selected package: `trackers==2.6.0`, Apache-2.0, `ByteTrackTracker`.
   - Rejected package: legacy `supervision.ByteTrack`; rejected because Supervision current docs deprecate it and direct users to `trackers`.
   - Hot stage: `ByteTrackAssociationAdapter.associate_clip()`.
-  - Copy/serde removed: build frame tensors as NumPy views from `DetectionBlock`; do not create per-detection Python dicts for tracker input.
+  - Copy/serde removed: build frame tensors through `ByteTrackTensorScratch`, a reusable `float32` buffer sized to the maximum candidate count for the clip; do not create per-detection Python dicts, per-frame concatenations, or JSON payloads for tracker input.
+  - Zero-copy boundary rule: `DetectionBlock` columns move by reference across internal filters; the only ByteTrack data movement is filling the reusable native tensor required by `trackers.ByteTrackTracker`.
   - Batching/concurrency: one tracker instance per clip; clip-level process pool bounded by `RuntimeConfig.max_clip_workers`.
   - Backpressure: CLI waits on bounded process futures; no unbounded task submission.
 - Columnar analytics:
@@ -141,6 +155,11 @@
   - Rejected custom CSV metrics; rejected because CSV would force string parsing and weak schema tracking across experiments.
   - Hot stage: metrics and regression over detections/tracks/decisions.
   - Copy/serde removed: persisted Parquet is scanned lazily by Polars; JSONL is for audit humans and not used for metrics hot path.
+- Open-source experiment tracking:
+  - Selected packages: `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`.
+  - Rejected custom SQL dashboard; rejected because MLflow/DVC/Evidently already provide mature run tracking, metric comparison, plots, and reports.
+  - Hot stage: none. Tracking export runs after aggregation, logs scalar metrics and artifact references, and must not run inside per-frame loops.
+  - Copy/serde removed: MLflow and DVCLive receive scalar metrics from `EvaluationSummary`; Evidently reads Arrow/Parquet-derived Pandas/Polars frames only in reporting, not adapter processing.
 - Schemas and type safety:
   - Selected package: `pydantic==2.13.4`.
   - Rejected raw dict parsing; rejected because domain identity and validation state must be impossible to erase.
@@ -160,11 +179,13 @@
   - Removed custom React workbench and retained static HTML/FiftyOne/Label Studio export paths.
 - Removed duplicate concepts:
   - Collapsed separate run history, experiment history, and provenance stores into `RunArtifactStore` plus `RunManifest`.
+  - Re-expanded cross-run history into `RunCatalog` after audit because `RunArtifactStore` alone cannot support easy regression queries without scanning every run directory.
   - Collapsed separate tracker and temporal association concepts into `ByteTrackAssociationAdapter` followed by temporal false-positive filters.
 - Reused package/helper:
   - ByteTrack association uses `trackers.ByteTrackTracker`.
   - Annotation and detection containers use Supervision.
   - Metrics tables use Arrow/Polars.
+  - Experiment tracking uses MLflow, DVC/DVCLive, and Evidently instead of a custom dashboard/database.
 - Reduced copy/serde:
   - JSON parse occurs once at input boundary.
   - Filter/tracker stages exchange NumPy/Arrow blocks.
@@ -175,6 +196,7 @@
 - Boundary transfer:
   - Public CLI passes typed config and ready handles into pipeline.
   - External artifact formats are written only by audit/report/run store modules.
+  - Experiment tracker adapters receive typed run summaries and artifact paths; domain modules never import MLflow, DVC, or Evidently.
 - RAII/resource ownership:
   - Dataset, run store, telemetry, video reader, and label store each have factory/context-manager ownership.
 - Test realism:
@@ -191,3 +213,4 @@
 - [04-pipeline-experiments-provenance.md](./04-pipeline-experiments-provenance.md): state-machine orchestration, experiment matrices, immutable run provenance, bounded concurrency.
 - [05-evaluation-regression.md](./05-evaluation-regression.md): gold-label import, accuracy metrics, calibration sweeps, regression gates.
 - [06-reporting-review-workbench.md](./06-reporting-review-workbench.md): HTML report, visual overlays/contact sheets, FiftyOne/Label Studio exports, architecture docs.
+- [07-open-source-experiment-tracking.md](./07-open-source-experiment-tracking.md): MLflow, DVC/DVCLive, Evidently, append-only run catalog, cross-run regression query path.

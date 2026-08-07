@@ -9,6 +9,7 @@
 - Create: `src/handdetect/eval/calibration.py`
 - Create: `src/handdetect/regression/baseline.py`
 - Create: `src/handdetect/regression/gates.py`
+- Create: `src/handdetect/regression/history.py`
 - Modify: `src/handdetect/cli/main.py`
 - Create: `tests/acceptance/test_evaluation_and_regression.py`
 
@@ -19,8 +20,9 @@
 - Produces:
   - `EvaluationRunner.evaluate(run_root: Path, labels_root: Path | None) -> EvaluationSummary`.
   - `RegressionGateRunner.check(run_root: Path, baseline_path: Path | None) -> RegressionSummary`.
-  - `runs/<run_id>/tables/evaluation_metrics.parquet`.
-  - `runs/<run_id>/regression.json`.
+  - `runs/<run_suite_id>/<run_id>/tables/evaluation_metrics.parquet`.
+  - `runs/<run_suite_id>/<run_id>/regression.json`.
+  - `runs/index/metric_history.parquet`.
 
 - [ ] **Step 1: Write failing evaluation/regression acceptance test**
 
@@ -46,8 +48,9 @@ def test_run_writes_evaluation_and_regression_outputs() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+    suite_id = result.stdout.split("suite_id=", 1)[1].split()[0]
     run_id = result.stdout.split("run_id=", 1)[1].split()[0]
-    run_root = ROOT / "runs" / run_id
+    run_root = ROOT / "runs" / suite_id / run_id
     assert (run_root / "tables" / "evaluation_metrics.parquet").exists()
     regression = json.loads((run_root / "regression.json").read_text(encoding="utf-8"))
     assert regression["interpolated_detection_count"] == 0
@@ -241,6 +244,24 @@ class RegressionGateRunner:
         return summary
 ```
 
+Create `src/handdetect/regression/history.py`:
+
+```python
+from __future__ import annotations
+
+from pathlib import Path
+
+import polars as pl
+
+
+class MetricHistoryReader:
+    def scan(self, runs_root: Path) -> pl.LazyFrame:
+        metric_history = runs_root / "index" / "metric_history.parquet"
+        if not metric_history.exists():
+            raise FileNotFoundError(f"metric history not found: {metric_history}")
+        return pl.scan_parquet(metric_history)
+```
+
 - [ ] **Step 6: Wire evaluation and regression into experiment runner**
 
 Modify `src/handdetect/experiments/runner.py` after manifest write:
@@ -280,4 +301,3 @@ Commit:
 git add labels src/handdetect/eval src/handdetect/regression src/handdetect/experiments/runner.py tests/acceptance/test_evaluation_and_regression.py
 git commit -m "feat: add evaluation and regression gates"
 ```
-
