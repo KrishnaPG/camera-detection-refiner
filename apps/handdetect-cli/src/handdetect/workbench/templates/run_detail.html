@@ -24,6 +24,9 @@
       {% endif %}
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/lineage/replay.lock.json">Replay lock</a></li>
     </ul>
+    <form method="post" action="/runs/{{ suite_id }}/{{ run_id }}/review/open">
+      <button type="submit">Open Review Platforms</button>
+    </form>
     <h2>Metrics</h2>
     <pre>{{ evaluation | tojson(indent=2) }}</pre>
     <pre>{{ regression | tojson(indent=2) }}</pre>

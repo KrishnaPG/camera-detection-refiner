@@ -14,9 +14,10 @@ from handdetect.filters.results import (
     TemporalStageResult,
     TrackBlock,
 )
-from handdetect.filters.temporal import REASON_CODE_UNSUPPORTED
+from handdetect.filters.temporal import REASON_CODE_UNSUPPORTED, TemporalFilterPipeline
 from handdetect.hotpath.blocks import DetectionBlock
 from handdetect.runtime_paths import runs_root
+from handdetect_domain.config import AdapterConfig
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -103,3 +104,46 @@ def test_decision_ledger_preserves_temporal_and_over_cap_reasons() -> None:
     assert by_detection["det-3"].decision == DetectionDecision.REJECTED
     assert by_detection["det-3"].stage == FilterName.MAX_TWO_SELECTOR
     assert by_detection["det-3"].reason == RejectReason.OVER_MAX_HANDS
+
+
+def test_temporal_track_support_keeps_all_observations_for_supported_track() -> None:
+    block = DetectionBlock(
+        clip_id=ClipId("clip-1"),
+        detection_ids=("det-0", "det-1", "det-2"),
+        frame_index=np.array([0, 1, 2], dtype=np.int32),
+        timestamp_ns=np.array([0, 1_000_000_000, 2_000_000_000], dtype=np.int64),
+        xyxy=np.array(
+            [
+                [0.0, 0.0, 10.0, 10.0],
+                [2.0, 0.0, 12.0, 10.0],
+                [4.0, 0.0, 14.0, 10.0],
+            ],
+            dtype=np.float32,
+        ),
+        confidence=np.array([0.9, 0.9, 0.9], dtype=np.float32),
+        class_id=np.zeros(3, dtype=np.int32),
+        handedness=("left", "left", "left"),
+    )
+    tracks = TrackBlock(
+        clip_id=ClipId("clip-1"),
+        source_detection_index=np.array([0, 1, 2], dtype=np.int32),
+        track_id=np.array([42, 42, 42], dtype=np.int32),
+        track_age_frames=np.array([1, 2, 3], dtype=np.int32),
+        track_score=np.array([0.9, 0.9, 0.9], dtype=np.float32),
+    )
+    config = AdapterConfig(
+        duplicate_iou_threshold=0.5,
+        min_box_area_px=1.0,
+        max_box_area_px=10_000.0,
+        min_aspect_ratio=0.1,
+        max_aspect_ratio=10.0,
+        max_center_speed_px_per_s=100.0,
+        min_track_length_frames=3,
+        static_camera_motion_px=0.0,
+        static_box_motion_px=0.0,
+    )
+
+    result = TemporalFilterPipeline().run(block, tracks, config)
+
+    assert result.keep_mask.tolist() == [True, True, True]
+    assert result.reject_reason_code.tolist() == [0, 0, 0]

@@ -20,6 +20,13 @@ def test_root_task_interface_exposes_required_targets() -> None:
     assert "handdetect doctor" in result.stdout
 
 
+def test_verify_runs_typecheck_gate() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "typecheck:" in makefile
+    assert "verify: check typecheck test" in makefile
+
+
 def test_cli_help_lists_public_commands() -> None:
     result = subprocess.run(
         ["python", "-m", "handdetect.cli.main", "--help"],
@@ -78,12 +85,12 @@ def test_make_clean_removes_isolated_runtime_state(tmp_path: Path) -> None:
 
 
 def test_config_runtime_roots_follow_tmp_root_env(monkeypatch, tmp_path: Path) -> None:
-    from handdetect.cli.main import _parse_config_with_runtime_env
+    from handdetect.runtime_config import parse_config_with_runtime_env
 
     runtime_root = tmp_path / "runtime"
     monkeypatch.setenv("HANDDETECT_TMP_ROOT", str(runtime_root))
 
-    parsed = _parse_config_with_runtime_env(ROOT / "configs" / "smoke-experiment.toml")
+    parsed = parse_config_with_runtime_env(ROOT / "configs" / "smoke-experiment.toml")
 
     assert parsed.runtime.runs_root == runtime_root / "runs"
     assert parsed.runtime.mlflow_tracking_uri == str(runtime_root / "mlruns")
@@ -92,14 +99,14 @@ def test_config_runtime_roots_follow_tmp_root_env(monkeypatch, tmp_path: Path) -
 
 
 def test_config_specific_runtime_roots_override_tmp_root_env(monkeypatch, tmp_path: Path) -> None:
-    from handdetect.cli.main import _parse_config_with_runtime_env
+    from handdetect.runtime_config import parse_config_with_runtime_env
 
     runtime_root = tmp_path / "runtime"
     explicit_runs_root = tmp_path / "explicit-runs"
     monkeypatch.setenv("HANDDETECT_TMP_ROOT", str(runtime_root))
     monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(explicit_runs_root))
 
-    parsed = _parse_config_with_runtime_env(ROOT / "configs" / "smoke-experiment.toml")
+    parsed = parse_config_with_runtime_env(ROOT / "configs" / "smoke-experiment.toml")
 
     assert parsed.runtime.runs_root == explicit_runs_root
     assert parsed.runtime.dvclive_root == runtime_root / "dvclive"

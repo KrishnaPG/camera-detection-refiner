@@ -31,6 +31,10 @@ class LineageSnapshotWriter:
         tracking = json.loads(
             (run_root / "tracking_export_status.json").read_text(encoding="utf-8")
         )
+        config_ref_path = self._portable_config_ref(config_path)
+        dataset_hash = self._tree_hash(data_root)
+        labels_hash = self._tree_hash(label_set_path)
+        config_hash = self._file_hash(config_path)
         lock = ReplayLock(
             run_suite_id=str(suite_id),
             run_id=str(run_id),
@@ -41,18 +45,21 @@ class LineageSnapshotWriter:
             ),
             dataset=ArtifactLineageRef(
                 logical_name="dataset",
-                path=data_root,
-                content_sha256=self._tree_hash(data_root),
+                path=data_root.resolve(),
+                content_sha256=dataset_hash,
+                dvc_hash=self._dvc_content_ref(dataset_hash),
             ),
             labels=ArtifactLineageRef(
                 logical_name="labels",
                 path=label_set_path,
-                content_sha256=self._tree_hash(label_set_path),
+                content_sha256=labels_hash,
+                dvc_hash=self._dvc_content_ref(labels_hash),
             ),
             config=ArtifactLineageRef(
                 logical_name="config",
-                path=config_path,
-                content_sha256=self._file_hash(config_path),
+                path=config_ref_path,
+                content_sha256=config_hash,
+                dvc_hash=self._dvc_content_ref(config_hash),
             ),
             tracking=TrackingLineageRef(
                 mlflow_run_id=tracking["mlflow"].get("run_id"),
@@ -65,7 +72,9 @@ class LineageSnapshotWriter:
             run_root / "lineage" / "source-snapshot",
             label_set_path,
             config_path,
+            config_ref_path,
         )
+        self._write_dvc_lineage_refs(run_root / "lineage" / "dvc-lineage-refs.json", lock)
         output.write_text(lock.model_dump_json(indent=2), encoding="utf-8")
         return output
 
@@ -95,11 +104,32 @@ class LineageSnapshotWriter:
             hasher.update(path.read_bytes())
         return hasher.hexdigest()
 
+    def _dvc_content_ref(self, content_sha256: str) -> str:
+        return f"sha256:{content_sha256}"
+
+    def _write_dvc_lineage_refs(self, output: Path, lock: ReplayLock) -> None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(
+            json.dumps(
+                {
+                    "restore_authority": "dvc_content_ref",
+                    "refs": {
+                        "dataset": lock.dataset.model_dump(mode="json"),
+                        "labels": lock.labels.model_dump(mode="json"),
+                        "config": lock.config.model_dump(mode="json"),
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
     def _write_source_snapshot(
         self,
         snapshot_root: Path,
         label_set_path: Path,
         config_path: Path,
+        config_ref_path: Path,
     ) -> None:
         snapshot_root.mkdir(parents=True, exist_ok=True)
         for name in ["apps", "packages", "handdetect", "configs", "labels"]:
@@ -111,16 +141,23 @@ class LineageSnapshotWriter:
                 shutil.rmtree(target)
             shutil.copytree(source, target)
         self._copy_input_path(label_set_path, snapshot_root)
-        self._copy_input_path(config_path, snapshot_root)
+        self._copy_input_path(config_path, snapshot_root, config_ref_path)
         for name in ["pyproject.toml", "Makefile", "README.md"]:
             source = Path(name)
             if source.exists():
                 shutil.copy2(source, snapshot_root / name)
 
-    def _copy_input_path(self, source: Path, snapshot_root: Path) -> None:
+    def _copy_input_path(
+        self,
+        source: Path,
+        snapshot_root: Path,
+        target_relative_path: Path | None = None,
+    ) -> None:
         if not source.exists():
             return
-        if source.is_absolute():
+        if target_relative_path is not None:
+            relative_source = target_relative_path
+        elif source.is_absolute():
             try:
                 relative_source = source.relative_to(Path.cwd())
             except ValueError:
@@ -138,3 +175,11 @@ class LineageSnapshotWriter:
             return
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
+
+    def _portable_config_ref(self, config_path: Path) -> Path:
+        if not config_path.is_absolute():
+            return config_path
+        try:
+            return config_path.relative_to(Path.cwd())
+        except ValueError:
+            return Path("configs") / config_path.name

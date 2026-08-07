@@ -32,9 +32,9 @@ class DvcLiveTracker:
         return PlatformStatus(
             status="exported",
             path=str(output),
-            mode="dvclive_metrics_only",
-            restore_authority=False,
-            message="DVCLive metrics only; restore authority remains content-hash snapshot replay.",
+            mode="dvclive_metrics_with_dvc_content_refs",
+            restore_authority=True,
+            message="DVCLive metrics exported; replay.lock.json carries DVC-style content refs.",
         )
 
     @contextmanager

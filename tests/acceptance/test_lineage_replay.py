@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import tomlkit
 from handdetect.lineage.replay import LineageReplayService
 from handdetect.runtime_paths import runs_root
@@ -139,9 +141,9 @@ def test_lineage_replay_uses_restored_worktree_inputs_and_main_run_roots(
         .read_text(encoding="utf-8")
         .splitlines()[-1]
     )
-    assert replay_status["restore"]["mode"] == "content_snapshot"
+    assert replay_status["restore"]["mode"] == "verified_content_refs"
     assert replay_status["restore"]["used_dvc_checkout"] is False
-    assert replay_status["restore"]["restore_authority"] == "content_snapshot"
+    assert replay_status["restore"]["restore_authority"] == "dvc_content_ref"
     assert replay_status["child_suite_id"] == child_suite
     assert replay_status["child_run_id"] == child_run
     child_lock = json.loads(
@@ -150,6 +152,7 @@ def test_lineage_replay_uses_restored_worktree_inputs_and_main_run_roots(
         )
     )
     assert child_lock["parent"] == {"run_suite_id": "suite-parent", "run_id": "run-parent"}
+    assert child_lock["restore_authority"] == "dvc_content_ref"
     comparison = json.loads(
         (
             repo_root / "runs" / child_suite / child_run / "lineage" / "parent-comparison.json"
@@ -299,9 +302,28 @@ def test_lineage_replay_runs_dvc_restore_when_metadata_is_present(monkeypatch, t
         .read_text(encoding="utf-8")
         .splitlines()[-1]
     )
-    assert replay_status["restore"]["mode"] == "content_snapshot"
+    assert replay_status["restore"]["mode"] == "dvc_checkout"
     assert replay_status["restore"]["used_dvc_checkout"] is True
-    assert replay_status["restore"]["restore_authority"] == "content_snapshot"
+    assert replay_status["restore"]["restore_authority"] == "dvc"
+
+
+def test_lineage_replay_does_not_symlink_missing_relative_inputs(monkeypatch, tmp_path) -> None:
+    repo_root, run_root = _build_replay_fixture(tmp_path)
+    shutil.rmtree(run_root / "lineage" / "source-snapshot" / "data")
+    live_data = repo_root / "data"
+    live_data.mkdir()
+    (live_data / "from-snapshot.txt").write_text("snapshot", encoding="utf-8")
+
+    monkeypatch.chdir(repo_root)
+    monkeypatch.setenv("HANDDETECT_TMP_ROOT", str(tmp_path / "tmp-root"))
+    monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(repo_root / "runs"))
+    monkeypatch.setattr(LineageReplayService, "_replay_id", lambda self: "replay-no-symlink")
+
+    with pytest.raises(RuntimeError, match="replay dataset missing"):
+        LineageReplayService().replay("suite-parent/run-parent", [])
+
+    worktree_data = tmp_path / "tmp-root" / "replays" / "replay-no-symlink" / "worktree" / "data"
+    assert not worktree_data.exists()
 
 
 class _Completed:

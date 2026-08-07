@@ -1,4 +1,4 @@
-.PHONY: bootstrap doctor run check test verify seed migrate clean workbench review-services-up review-services-down
+.PHONY: bootstrap doctor run check typecheck test verify seed migrate clean workbench review-services-up review-services-down
 
 PYTHON ?= python
 CONFIG ?= configs/default-experiments.toml
@@ -17,10 +17,19 @@ check:
 	$(PYTHON) -m ruff format --check packages apps tests
 	$(PYTHON) -m ruff check packages apps tests
 
+typecheck:
+	$(PYTHON) -m mypy \
+		packages/dq-contracts/src \
+		packages/handdetect-domain/src \
+		packages/dq-resources/src \
+		packages/experiment-tracking/src/experiment_tracking/interfaces.py \
+		packages/experiment-tracking/src/experiment_tracking/export_status.py \
+		apps/handdetect-cli/src/handdetect/lineage/models.py
+
 test:
 	$(PYTHON) -m pytest tests/acceptance -v
 
-verify: check test
+verify: check typecheck test
 
 seed:
 	$(PYTHON) -m handdetect.cli.main seed --data-root data

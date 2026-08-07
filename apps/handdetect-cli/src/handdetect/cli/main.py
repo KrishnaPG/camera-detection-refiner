@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from dq_boundaries.config import ExperimentConfigParser
 from dq_contracts.ids import RunId, RunSuiteId
 from handdetect.experiments.runner import ExperimentRunner
 from handdetect.io.dataset import DatasetScanner
@@ -22,9 +20,10 @@ from handdetect.review_journey.launcher import ReviewJourneyLauncher
 from handdetect.runs.ids import RunSuiteIdProvider
 from handdetect.runs.manifest import SeedManifest
 from handdetect.runs.store import SeedManifestWriter
+from handdetect.runtime_config import parse_config_with_runtime_env
 from handdetect.runtime_paths import dvclive_root, mlflow_root, runs_root, runtime_state_root
 from handdetect.workbench.server import serve
-from handdetect_domain.config import RuntimeConfig, ValidatedExperimentConfig
+from handdetect_domain.config import RuntimeConfig
 
 app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
@@ -65,7 +64,7 @@ def seed(data_root: Path = Path("data"), out: Path | None = None) -> None:
 
 @app.command()
 def run(config: RunConfigOption) -> None:
-    parsed = _parse_config_with_runtime_env(config)
+    parsed = parse_config_with_runtime_env(config)
     suite_id = RunSuiteIdProvider().create()
     run_ids = ExperimentRunner().run(parsed, suite_id, config)
     for run_id in run_ids:
@@ -129,7 +128,7 @@ def review_open(
     run_root = runs_root() / suite_id / run_id
     config_path = Path(run_root / "run-manifest.json")
     manifest = json.loads(config_path.read_text(encoding="utf-8"))
-    runtime = _parse_config_with_runtime_env(Path(manifest["config_path"])).runtime
+    runtime = parse_config_with_runtime_env(Path(manifest["config_path"])).runtime
     platform_manifest = ReviewJourneyLauncher().open(
         RunSuiteId(suite_id),
         RunId(run_id),
@@ -172,39 +171,6 @@ def verify() -> None:
 def freeze_labels(source: Path) -> None:
     output = LabelSetFreezer().freeze_tasks(source)
     typer.echo(f"label_set_manifest={output}")
-
-
-def _parse_config_with_runtime_env(config_path: Path) -> ValidatedExperimentConfig:
-    parsed = ExperimentConfigParser().parse_path(config_path)
-    updates: dict[str, Path | str] = {}
-    tmp_root_value = os.environ.get("HANDDETECT_TMP_ROOT", "").strip()
-    if tmp_root_value:
-        tmp_root = Path(tmp_root_value)
-        updates.update(
-            {
-                "runs_root": tmp_root / "runs",
-                "mlflow_tracking_uri": str(tmp_root / "mlruns"),
-                "dvclive_root": tmp_root / "dvclive",
-                "evidently_root": tmp_root / "evidently",
-            }
-        )
-    env_map = {
-        "HANDDETECT_RUNS_ROOT": "runs_root",
-        "HANDDETECT_MLFLOW_TRACKING_URI": "mlflow_tracking_uri",
-        "HANDDETECT_DVCLIVE_ROOT": "dvclive_root",
-        "HANDDETECT_EVIDENTLY_ROOT": "evidently_root",
-        "HANDDETECT_LABEL_STUDIO_URL": "label_studio_url",
-        "HANDDETECT_LABEL_STUDIO_PUBLIC_URL": "label_studio_public_url",
-        "HANDDETECT_LABEL_STUDIO_TOKEN": "label_studio_token",
-    }
-    for env_name, field_name in env_map.items():
-        value = os.environ.get(env_name, "").strip()
-        if value:
-            updates[field_name] = Path(value) if field_name.endswith("_root") else value
-    if not updates:
-        return parsed
-    runtime = parsed.runtime.model_copy(update=updates)
-    return parsed.model_copy(update={"runtime": runtime})
 
 
 if __name__ == "__main__":

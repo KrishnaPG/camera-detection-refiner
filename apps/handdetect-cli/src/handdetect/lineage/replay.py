@@ -21,7 +21,6 @@ from handdetect.runtime_paths import dvclive_root, mlflow_root, replay_root, run
 class LineageReplayService:
     def replay(self, from_run: str, overrides: list[str]) -> tuple[str, str]:
         suite_id, run_id = from_run.split("/", 1)
-        main_root = Path.cwd()
         main_runs_root = runs_root()
         parent_root = main_runs_root / suite_id / run_id
         parent_manifest = json.loads(
@@ -59,7 +58,7 @@ class LineageReplayService:
                 )
         status_path = current_replay_root / "replay-status.jsonl"
         self._append_status(status_path, {"status": "starting"})
-        restore = self._restore_inputs(parent_lock, worktree, main_root)
+        restore = self._restore_inputs(parent_lock, worktree)
         restore["source_mode"] = restore_mode
         config_path = (worktree / "configs" / f"replay-{suite_id}-{run_id}.toml").resolve()
         self._write_override_config(
@@ -93,7 +92,7 @@ class LineageReplayService:
         child_lock_path = main_runs_root / child_suite / child_run / "lineage" / "replay.lock.json"
         child_lock = json.loads(child_lock_path.read_text(encoding="utf-8"))
         child_lock["parent"] = {"run_suite_id": suite_id, "run_id": run_id}
-        child_lock["restore_authority"] = "content_snapshot"
+        child_lock["restore_authority"] = restore["restore_authority"]
         child_lock_path.write_text(json.dumps(child_lock, indent=2), encoding="utf-8")
         child_root = main_runs_root / child_suite / child_run
         RegressionGateRunner().check(child_root, parent_root)
@@ -164,29 +163,27 @@ class LineageReplayService:
         self,
         parent_lock: dict[str, object],
         worktree: Path,
-        main_root: Path,
     ) -> dict[str, object]:
         if self._has_dvc_metadata(worktree):
             for command in (["dvc", "pull"], ["dvc", "checkout"]):
                 subprocess.run(command, cwd=worktree, check=True, text=True)
             self._verify_restored_inputs(parent_lock, worktree)
             return {
-                "mode": "content_snapshot",
-                "restore_authority": "content_snapshot",
+                "mode": "dvc_checkout",
+                "restore_authority": "dvc",
                 "used_dvc_checkout": True,
             }
         restored_from_content_refs = []
         for key in ("dataset", "labels", "config"):
             path_value = str(parent_lock[key]["path"])
-            if self._ensure_worktree_input(main_root, worktree, path_value):
-                restored_from_content_refs.append(path_value)
             target = self._worktree_input_path(worktree, path_value)
             if not target.exists():
                 raise RuntimeError(f"replay {key} missing at recorded path {target}")
             self._verify_content_ref(parent_lock, key, target)
+            restored_from_content_refs.append(path_value)
         return {
-            "mode": "content_snapshot",
-            "restore_authority": "content_snapshot",
+            "mode": "verified_content_refs",
+            "restore_authority": "dvc_content_ref",
             "used_dvc_checkout": False,
             "dataset_path": str(parent_lock["dataset"]["path"]),
             "label_path": str(parent_lock["labels"]["path"]),
@@ -204,23 +201,6 @@ class LineageReplayService:
         if lineage_path.is_absolute():
             return lineage_path
         return (worktree / lineage_path).resolve()
-
-    def _ensure_worktree_input(self, main_root: Path, worktree: Path, path_value: str) -> bool:
-        target = self._worktree_input_path(worktree, path_value)
-        if target.exists():
-            return False
-        lineage_path = Path(path_value)
-        source = (
-            lineage_path if lineage_path.is_absolute() else (main_root / lineage_path).resolve()
-        )
-        if not source.exists():
-            return False
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if source.is_dir():
-            os.symlink(source, target, target_is_directory=True)
-        else:
-            os.symlink(source, target)
-        return True
 
     def _verify_restored_inputs(self, parent_lock: dict[str, object], worktree: Path) -> None:
         for key in ("dataset", "labels", "config"):

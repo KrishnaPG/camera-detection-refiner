@@ -36,7 +36,15 @@ class FiftyOneDatasetPublisher:
             session = fo.launch_app(dataset, address="0.0.0.0", port=5151, remote=True, auto=False)
         except Exception as exc:
             if self._is_reusable_app_port_conflict(exc):
-                return dataset_name, "http://localhost:5151", None
+                reusable_url = self._reuse_existing_session(dataset)
+                if reusable_url is not None:
+                    return dataset_name, reusable_url, None
+                return (
+                    dataset_name,
+                    None,
+                    "FiftyOne app port 5151 is already in use; dataset was published "
+                    "but the active app session could not be switched.",
+                )
             return dataset_name, None, str(exc)
         _SESSIONS[dataset_name] = session
         return dataset_name, f"http://localhost:{session.server_port}", None
@@ -44,6 +52,15 @@ class FiftyOneDatasetPublisher:
     def _is_reusable_app_port_conflict(self, exc: Exception) -> bool:
         message = str(exc)
         return "Address already in use" in message or "[Errno 98]" in message
+
+    def _reuse_existing_session(self, dataset: Any) -> str | None:
+        for session in reversed(tuple(_SESSIONS.values())):
+            try:
+                session.dataset = dataset
+                return f"http://localhost:{session.server_port}"
+            except Exception:
+                continue
+        return None
 
     def _reset_dataset(self, fo: Any, dataset_name: str) -> None:
         if fo.dataset_exists(dataset_name):

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from handdetect.workbench.server import create_app, parse_run_ids
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_workbench_index_renders_operator_entrypoints(monkeypatch, tmp_path) -> None:
@@ -67,7 +70,59 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
     assert "Static report" in response.text
     assert "http://localhost:5000" in response.text
     assert "http://localhost:5151" in response.text
+    assert "Open Review Platforms" in response.text
     assert "Replay With Override" in response.text
+
+
+def test_workbench_review_open_runs_launcher_in_server_process(monkeypatch, tmp_path) -> None:
+    suite_id = "suite-20260807-review"
+    run_id = "run-20260807-review"
+    run_root = tmp_path / "runs" / suite_id / run_id
+    run_root.mkdir(parents=True)
+    monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(tmp_path / "runs"))
+    monkeypatch.chdir(ROOT)
+    calls: list[dict[str, object]] = []
+
+    (run_root / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "run_suite_id": suite_id,
+                "run_id": run_id,
+                "config_path": str(ROOT / "configs" / "smoke-experiment.toml"),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeLauncher:
+        def open(self, suite, run, runtime, root):
+            calls.append(
+                {
+                    "suite": str(suite),
+                    "run": str(run),
+                    "runs_root": runtime.runs_root,
+                    "root": root,
+                }
+            )
+
+    monkeypatch.setattr("handdetect.workbench.server.ReviewJourneyLauncher", FakeLauncher)
+
+    response = TestClient(create_app()).post(
+        f"/runs/{suite_id}/{run_id}/review/open",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/runs/{suite_id}/{run_id}"
+    assert calls == [
+        {
+            "suite": suite_id,
+            "run": run_id,
+            "runs_root": tmp_path / "runs",
+            "root": run_root,
+        }
+    ]
 
 
 def test_workbench_run_detail_reports_missing_run(monkeypatch, tmp_path) -> None:

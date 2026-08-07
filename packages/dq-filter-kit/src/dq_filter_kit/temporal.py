@@ -42,7 +42,7 @@ class TemporalFilterPipeline:
         reason = np.zeros(tracks.source_detection_index.shape[0], dtype=np.int32)
         static_scores = np.zeros(tracks.source_detection_index.shape[0], dtype=np.float32)
 
-        short_track = tracks.track_age_frames < config.min_track_length_frames
+        short_track = self._unsupported_track_mask(tracks, config.min_track_length_frames)
         keep[short_track] = False
         reason[short_track] = REASON_CODE_UNSUPPORTED
 
@@ -56,6 +56,16 @@ class TemporalFilterPipeline:
             track_id=tracks.track_id,
             static_score=static_scores,
         )
+
+    def _unsupported_track_mask(
+        self, tracks: TrackBlock, min_track_length_frames: int
+    ) -> np.ndarray:
+        _, inverse, counts = np.unique(
+            tracks.track_id,
+            return_inverse=True,
+            return_counts=True,
+        )
+        return counts[inverse] < min_track_length_frames
 
     def _reject_large_jumps(
         self,

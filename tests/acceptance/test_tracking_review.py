@@ -13,7 +13,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from dq_contracts.ids import RunId, RunSuiteId
-from handdetect.review.fiftyone_dataset import FiftyOneDatasetPublisher
+from handdetect.review.fiftyone_dataset import _SESSIONS, FiftyOneDatasetPublisher
 from handdetect.review.labelstudio_client import (
     LABEL_STUDIO_PROJECT_TITLE_MAX_LENGTH,
     LabelStudioPublisher,
@@ -35,6 +35,7 @@ def tracking_review_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HANDDETECT_KEEP_SUITES", "100")
     monkeypatch.setenv("HANDDETECT_MIN_FREE_BYTES", "0")
     monkeypatch.setenv("HANDDETECT_MAX_RUNTIME_BYTES", "999999999999")
+    _SESSIONS.clear()
 
 
 def _run_smoke() -> tuple[str, str]:
@@ -58,8 +59,8 @@ def test_tracking_exports_and_review_manifest_are_available() -> None:
     tracking = json.loads((run_root / "tracking_export_status.json").read_text(encoding="utf-8"))
     assert tracking["mlflow"]["status"] == "exported"
     assert tracking["dvc"]["status"] == "exported"
-    assert tracking["dvc"]["mode"] == "dvclive_metrics_only"
-    assert tracking["dvc"]["restore_authority"] is False
+    assert tracking["dvc"]["mode"] == "dvclive_metrics_with_dvc_content_refs"
+    assert tracking["dvc"]["restore_authority"] is True
     assert tracking["evidently"]["status"] == "exported"
     evidently_path = Path(tracking["evidently"]["path"])
     assert evidently_path.exists()
@@ -85,14 +86,18 @@ def test_tracking_exports_and_review_manifest_are_available() -> None:
     manifest = json.loads((run_root / "review" / "platforms.json").read_text(encoding="utf-8"))
     assert manifest["fiftyone"]["status"] in {"ready", "path_only"}
     assert manifest["label_studio"]["status"] in {"ready", "import_file"}
-    assert "DVCLive metrics only" in manifest["dvc"]["message"]
+    assert "DVC-style content refs" in manifest["dvc"]["message"]
+    lock = json.loads((run_root / "lineage" / "replay.lock.json").read_text(encoding="utf-8"))
+    assert lock["dataset"]["dvc_hash"].startswith("sha256:")
+    assert lock["labels"]["dvc_hash"].startswith("sha256:")
+    assert lock["config"]["dvc_hash"].startswith("sha256:")
+    assert (run_root / "lineage" / "dvc-lineage-refs.json").exists()
     label_tasks = json.loads((run_root / "review" / "labelstudio-tasks.json").read_text())
     assert label_tasks[0]["predictions"][0]["result"]
     report_html = (run_root / "report" / "index.html").read_text(encoding="utf-8")
     assert "Platform manifest: <code>review/platforms.json</code> (available)." in report_html
     assert (
-        "DVCLive metrics only; restore authority remains content-hash snapshot replay."
-        in report_html
+        "DVCLive metrics exported; replay.lock.json carries DVC-style content refs." in report_html
     )
     assert "not yet generated" not in report_html
     assert "http://localhost:5000" in report_html
@@ -126,7 +131,7 @@ def test_lineage_replay_publishes_review_platform_manifest() -> None:
     platforms = json.loads((child_root / "review" / "platforms.json").read_text(encoding="utf-8"))
     assert platforms["mlflow"]["status"] == "ready"
     assert platforms["dvc"]["status"] == "ready"
-    assert "DVCLive metrics only" in platforms["dvc"]["message"]
+    assert "DVC-style content refs" in platforms["dvc"]["message"]
     assert platforms["evidently"]["status"] == "ready"
     assert platforms["fiftyone"]["status"] in {"ready", "path_only"}
     assert platforms["label_studio"]["status"] in {"ready", "import_file"}
@@ -137,7 +142,7 @@ def test_lineage_replay_publishes_review_platform_manifest() -> None:
         (child_root / "lineage" / "replay.lock.json").read_text(encoding="utf-8")
     )
     assert child_lock["parent"] == {"run_suite_id": suite_id, "run_id": run_id}
-    assert child_lock["restore_authority"] == "content_snapshot"
+    assert child_lock["restore_authority"] == "dvc_content_ref"
 
 
 def test_review_launcher_falls_back_when_fiftyone_runtime_breaks(monkeypatch, tmp_path) -> None:
@@ -273,6 +278,7 @@ def test_fiftyone_publish_handles_decisions_without_frame_column(monkeypatch, tm
 def test_fiftyone_publish_reuses_existing_app_when_port_is_bound(monkeypatch, tmp_path) -> None:
     run_root = _write_minimal_fiftyone_run(tmp_path)
     fake_fiftyone = _fake_fiftyone_module()
+    _SESSIONS["existing"] = fake_fiftyone.FakeSession()
 
     def fail_launch_app(dataset, address: str, port: int, remote: bool, auto: bool):
         raise OSError("[Errno 98] Address already in use")
@@ -290,6 +296,29 @@ def test_fiftyone_publish_reuses_existing_app_when_port_is_bound(monkeypatch, tm
     assert url == "http://localhost:5151"
     assert error is None
     assert dataset_name in fake_fiftyone._datasets
+    assert _SESSIONS["existing"].dataset is fake_fiftyone._datasets[dataset_name]
+
+
+def test_fiftyone_publish_degrades_when_external_app_owns_port(monkeypatch, tmp_path) -> None:
+    run_root = _write_minimal_fiftyone_run(tmp_path)
+    fake_fiftyone = _fake_fiftyone_module()
+
+    def fail_launch_app(dataset, address: str, port: int, remote: bool, auto: bool):
+        raise OSError("[Errno 98] Address already in use")
+
+    fake_fiftyone.launch_app = fail_launch_app
+    monkeypatch.setitem(sys.modules, "fiftyone", fake_fiftyone)
+
+    dataset_name, url, error = FiftyOneDatasetPublisher().publish(
+        RunSuiteId("suite-a"),
+        RunId("run-a"),
+        run_root,
+    )
+
+    assert dataset_name == "handdetect_suite-a_run-a"
+    assert url is None
+    assert error is not None
+    assert "active app session could not be switched" in error
 
 
 def test_evidently_writer_uses_package_api_when_available(monkeypatch, tmp_path) -> None:
@@ -410,8 +439,10 @@ def _fake_fiftyone_module() -> types.ModuleType:
 
     class FakeSession:
         server_port = 5151
+        dataset: FakeDataset | None = None
 
     fake.Dataset = FakeDataset
+    fake.FakeSession = FakeSession
     fake.Sample = FakeSample
     fake.Detections = FakeDetections
     fake.Detection = FakeDetection

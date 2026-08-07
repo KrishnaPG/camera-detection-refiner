@@ -7,10 +7,13 @@ from pathlib import Path
 from uuid import uuid4
 
 import uvicorn
+from dq_contracts.ids import RunId, RunSuiteId
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from handdetect.lineage.replay import LineageReplayService
+from handdetect.review_journey.launcher import ReviewJourneyLauncher
+from handdetect.runtime_config import parse_config_with_runtime_env
 from handdetect.runtime_paths import runs_root, workbench_job_root
 
 
@@ -112,6 +115,11 @@ def create_app() -> FastAPI:
         child_suite, child_run = LineageReplayService().replay(f"{suite_id}/{run_id}", [override])
         return RedirectResponse(url=f"/runs/{child_suite}/{child_run}", status_code=303)
 
+    @app.post("/runs/{suite_id}/{run_id}/review/open")
+    def open_review_platforms_route(suite_id: str, run_id: str) -> RedirectResponse:
+        open_review_platforms(suite_id, run_id)
+        return RedirectResponse(url=f"/runs/{suite_id}/{run_id}", status_code=303)
+
     @app.get("/artifacts/{suite_id}/{run_id}/{artifact_path:path}")
     def artifact(suite_id: str, run_id: str, artifact_path: str) -> FileResponse:
         run_root = (runs_root() / suite_id / run_id).resolve()
@@ -143,6 +151,23 @@ def read_required_run_json(
     return json.loads(target.read_text(encoding="utf-8"))
 
 
+def open_review_platforms(suite_id: str, run_id: str) -> None:
+    run_root = runs_root() / suite_id / run_id
+    manifest = read_required_run_json(run_root, "run-manifest.json", suite_id, run_id)
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("config_path"), str):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Run not found for {suite_id}/{run_id}: missing config_path",
+        )
+    runtime = parse_config_with_runtime_env(Path(manifest["config_path"])).runtime
+    ReviewJourneyLauncher().open(
+        RunSuiteId(suite_id),
+        RunId(run_id),
+        runtime,
+        run_root,
+    )
+
+
 def serve(host: str, port: int) -> None:
     uvicorn.run(create_app(), host=host, port=port)
 
@@ -167,9 +192,20 @@ if [ "$status" -eq 0 ]; then
   suite_id=$(sed -n 's/.*suite_id=\\([^ ]*\\).*/\\1/p' {log_path} | tail -1)
   run_id=$(sed -n 's/.*run_id=\\([^ ]*\\).*/\\1/p' {log_path} | tail -1)
   if [ -n "$suite_id" ] && [ -n "$run_id" ]; then
-    python -m handdetect.cli.main review open \\
-      --suite-id "$suite_id" \\
-      --run-id "$run_id" >> {log_path} 2>&1 || status=$?
+    HANDDETECT_JOB_SUITE_ID="$suite_id" \\
+    HANDDETECT_JOB_RUN_ID="$run_id" \\
+    python - <<'PY' >> {log_path} 2>&1 || status=$?
+import os
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+
+suite_id = quote(os.environ["HANDDETECT_JOB_SUITE_ID"], safe="")
+run_id = quote(os.environ["HANDDETECT_JOB_RUN_ID"], safe="")
+url = f"http://127.0.0.1:8000/runs/{{suite_id}}/{{run_id}}/review/open"
+request = Request(url, method="POST")
+with urlopen(request, timeout=120) as response:
+    print(f"review_open_status={{response.status}} url={{response.geturl()}}")
+PY
   else
     status=1
   fi
