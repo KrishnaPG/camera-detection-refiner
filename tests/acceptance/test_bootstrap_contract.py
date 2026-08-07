@@ -18,12 +18,16 @@ def test_pyproject_declares_label_studio_compatible_opencv_pin() -> None:
     label_studio = requirements["label-studio-sdk"]
     fiftyone = requirements["fiftyone"]
     numpy = requirements["numpy"]
+    plotly = requirements["plotly"]
+    starlette = requirements["starlette"]
 
     assert str(label_studio.specifier) == "==2.1.0"
     assert fiftyone.specifier.contains(Version("0.25.2"))
     assert not fiftyone.specifier.contains(Version("1.20.1"))
     assert numpy.specifier.contains(Version("2.2.6"))
     assert not numpy.specifier.contains(Version("2.5.1"))
+    assert plotly.specifier.contains(Version("5.24.1"))
+    assert starlette.specifier.contains(Version("0.46.2"))
     assert opencv.specifier.contains(Version("4.12.0.88"))
     assert not opencv.specifier.contains(Version("5.0.0.93"))
 
@@ -90,14 +94,20 @@ def test_compose_starts_review_platform_infra() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "fiftyone-mongo:" in compose
     assert "mongo:7.0.15" in compose
+    assert "mongod --quiet --dbpath /data/db --bind_ip_all" in compose
+    assert "condition: service_healthy" in compose
+    assert "mongosh --quiet --eval" in compose
     assert "fiftyone:" in compose
     assert "fiftyone app launch --address 0.0.0.0 --port 5151 --remote --wait -1" in compose
     assert "FIFTYONE_DATABASE_URI" in compose
     assert "HANDDETECT_FIFTYONE_PUBLIC_URL" in compose
     assert "/tmp/handdetect-services/fiftyone-mongo:/data/db" in compose
+    assert "HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS" in compose
+    assert "find /data/db -mindepth 1 -maxdepth 1 -mtime" in compose
     assert "label-studio:" in compose
     assert "heartexlabs/label-studio:1.21.0" in compose
     assert "/tmp/handdetect-services/label-studio:/label-studio/data" in compose
+    assert "find /label-studio/data -mindepth 1 -maxdepth 1 -mtime" in compose
     assert "HANDDETECT_LABEL_STUDIO_URL" in compose
     assert "HANDDETECT_LABEL_STUDIO_PUBLIC_URL" in compose
     assert "LABEL_STUDIO_USER_TOKEN" in compose
@@ -205,6 +215,7 @@ def test_compose_prepares_tmp_state_then_drops_to_host_uid() -> None:
     assert "USER=handdetect" in compose
     assert "LOGNAME=handdetect" in compose
     assert "setpriv --reuid" in compose
+    assert "HANDDETECT_SELECTED_DATA_SNAPSHOT_MAX_BYTES" in compose
 
 
 def test_label_studio_compose_enables_token_and_recovers_generated_sqlite_state() -> None:

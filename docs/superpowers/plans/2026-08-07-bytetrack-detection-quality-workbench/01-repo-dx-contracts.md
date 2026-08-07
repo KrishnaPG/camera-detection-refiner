@@ -99,7 +99,7 @@ description = "ByteTrack-backed hand detection quality workbench"
 requires-python = "==3.12.*"
 dependencies = [
   "fastapi==0.141.1",
-  "fiftyone==1.20.1",
+  "fiftyone==0.25.2",
   "jinja2==3.1.6",
   "label-studio-sdk==2.1.0",
   "mlflow==3.15.1",

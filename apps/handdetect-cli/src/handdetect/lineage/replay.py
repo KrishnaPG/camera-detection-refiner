@@ -11,11 +11,19 @@ from pathlib import Path
 
 import tomlkit
 from dq_boundaries.config import ExperimentConfigParser
-from dq_contracts.ids import RunId, RunSuiteId
+from dq_contracts.ids import ExperimentId, RunId, RunSuiteId
 from handdetect.regression.gates import RegressionGateRunner
 from handdetect.report.static_report import StaticReportBuilder
 from handdetect.review_journey.launcher import ReviewJourneyLauncher
 from handdetect.runtime_paths import dvclive_root, mlflow_root, replay_root, runs_root
+from handdetect.tracking_platforms.dvc_tracker import DvcLiveTracker
+from handdetect.tracking_platforms.evidently_report import EvidentlyReportWriter
+from handdetect.tracking_platforms.export_status import (
+    TrackingExportStatus,
+    TrackingExportStatusWriter,
+)
+from handdetect.tracking_platforms.interfaces import TrackingMetric, TrackingRunSummary
+from handdetect.tracking_platforms.mlflow_tracker import MlflowExperimentTracker
 
 
 class LineageReplayService:
@@ -97,6 +105,11 @@ class LineageReplayService:
         child_root = main_runs_root / child_suite / child_run
         RegressionGateRunner().check(child_root, parent_root)
         self._write_parent_comparison(child_root, parent_root)
+        mlflow_run_id = self._reexport_child_tracking(child_root)
+        if mlflow_run_id:
+            child_lock = json.loads(child_lock_path.read_text(encoding="utf-8"))
+            child_lock.setdefault("tracking", {})["mlflow_run_id"] = mlflow_run_id
+            child_lock_path.write_text(json.dumps(child_lock, indent=2), encoding="utf-8")
         StaticReportBuilder().build(child_root)
         self._publish_child_review(child_suite, child_run, config_path)
         return child_suite, child_run
@@ -199,6 +212,9 @@ class LineageReplayService:
     def _worktree_input_path(self, worktree: Path, path_value: str) -> Path:
         lineage_path = Path(path_value)
         if lineage_path.is_absolute():
+            snapshot_candidate = worktree / lineage_path.name
+            if snapshot_candidate.exists():
+                return snapshot_candidate
             return lineage_path
         return (worktree / lineage_path).resolve()
 
@@ -314,3 +330,55 @@ class LineageReplayService:
         }
         output = child_root / "lineage" / "parent-comparison.json"
         output.write_text(json.dumps(comparison, indent=2), encoding="utf-8")
+
+    def _reexport_child_tracking(self, child_root: Path) -> str | None:
+        manifest = json.loads((child_root / "run-manifest.json").read_text(encoding="utf-8"))
+        evaluation = json.loads((child_root / "evaluation.json").read_text(encoding="utf-8"))
+        regression = json.loads((child_root / "regression.json").read_text(encoding="utf-8"))
+        comparison_path = child_root / "lineage" / "parent-comparison.json"
+        comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+        metrics = [
+            TrackingMetric(name=name, value=float(evaluation.get(name, 0.0)))
+            for name in (
+                "raw_detection_count",
+                "cleaned_detection_count",
+                "rejected_detection_count",
+                "interpolated_detection_count",
+            )
+        ]
+        for name, value in comparison.get("metric_deltas", {}).items():
+            metrics.append(TrackingMetric(name=f"parent_delta_{name}", value=float(value)))
+        metrics.append(
+            TrackingMetric(
+                name="regression_baseline_available",
+                value=1.0 if regression.get("baseline_available") else 0.0,
+            )
+        )
+        summary = TrackingRunSummary(
+            run_suite_id=RunSuiteId(str(manifest["run_suite_id"])),
+            run_id=RunId(str(manifest["run_id"])),
+            experiment_id=ExperimentId(str(manifest["experiment_id"])),
+            config_sha256=str(manifest.get("config_sha256", "")),
+            dataset_file_count=0,
+            clip_count=len(manifest.get("clip_ids", [])),
+            metrics=tuple(metrics),
+            artifact_paths=(
+                child_root / "evaluation.json",
+                child_root / "regression.json",
+                child_root / "run-manifest.json",
+                comparison_path,
+            ),
+            run_root=child_root,
+        )
+        mlflow_status = MlflowExperimentTracker(str(mlflow_root())).log_run(summary)
+        dvc_status = DvcLiveTracker(dvclive_root()).log_run(summary)
+        evidently_status = EvidentlyReportWriter().write(summary)
+        TrackingExportStatusWriter().write(
+            TrackingExportStatus(
+                mlflow=mlflow_status,
+                dvc=dvc_status,
+                evidently=evidently_status,
+            ),
+            child_root,
+        )
+        return mlflow_status.run_id

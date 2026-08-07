@@ -31,6 +31,7 @@ services:
       HANDDETECT_MAX_RUNTIME_BYTES: "${HANDDETECT_MAX_RUNTIME_BYTES:-21474836480}"
       HANDDETECT_MIN_FREE_BYTES: "${HANDDETECT_MIN_FREE_BYTES:-5368709120}"
       HANDDETECT_KEEP_SUITES: "${HANDDETECT_KEEP_SUITES:-5}"
+      HANDDETECT_SELECTED_DATA_SNAPSHOT_MAX_BYTES: "${HANDDETECT_SELECTED_DATA_SNAPSHOT_MAX_BYTES:-1073741824}"
       HANDDETECT_LABEL_STUDIO_URL: "http://label-studio:8080"
       HANDDETECT_LABEL_STUDIO_PUBLIC_URL: "http://localhost:8080"
       HANDDETECT_LABEL_STUDIO_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
@@ -44,8 +45,10 @@ services:
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace
     depends_on:
-      - fiftyone-mongo
-      - label-studio
+      fiftyone-mongo:
+        condition: service_healthy
+      label-studio:
+        condition: service_started
 
   mlflow:
     image: handdetect-app:local
@@ -76,7 +79,22 @@ services:
   fiftyone-mongo:
     image: mongo:7.0.15
     user: "0:0"
-    command: ["mongod", "--quiet", "--dbpath", "/data/db"]
+    command:
+      - sh
+      - -lc
+      - |
+        find /data/db -mindepth 1 -maxdepth 1 -mtime +"$${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}" -exec rm -rf {} +
+        exec mongod --quiet --dbpath /data/db --bind_ip_all
+    environment:
+      HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS: "${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mongosh --quiet --eval 'db.adminCommand("ping").ok' >/dev/null
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 2s
     volumes:
       - /tmp/handdetect-services/fiftyone-mongo:/data/db
 
@@ -104,7 +122,8 @@ services:
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace
     depends_on:
-      - fiftyone-mongo
+      fiftyone-mongo:
+        condition: service_healthy
 
   label-studio:
     image: heartexlabs/label-studio:1.21.0
@@ -114,6 +133,7 @@ services:
       - -lc
       - |
         set -o pipefail
+        find /label-studio/data -mindepth 1 -maxdepth 1 -mtime +"$${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}" -exec rm -rf {} +
 
         start_label_studio() {
           /label-studio/.venv/bin/label-studio start \
@@ -171,6 +191,7 @@ services:
       LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN: "true"
       LABEL_STUDIO_BASE_DATA_DIR: "/label-studio/data"
       LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK: "true"
+      HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS: "${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}"
     ports:
       - "8080:8080"
     volumes:

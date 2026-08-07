@@ -1,8 +1,15 @@
 # HandDetect Quality Workbench
 
-`docker compose up -d` starts the local workbench at `http://localhost:8000` and MLflow at `http://localhost:5000`.
+`docker compose up -d` starts the full local workbench stack:
 
-Use the workbench UI to trigger a smoke run, inspect artifacts, and replay prior runs. CLI equivalents:
+- Workbench: `http://localhost:8000`
+- MLflow: `http://localhost:5000`
+- FiftyOne: `http://localhost:5151`
+- Label Studio: `http://localhost:8080`
+
+Use the Workbench UI to trigger a smoke run, inspect artifacts, and replay prior runs.
+
+Developer-only host commands are available after `make bootstrap`:
 
 ```bash
 make seed

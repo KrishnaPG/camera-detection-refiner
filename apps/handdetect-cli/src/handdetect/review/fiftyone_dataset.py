@@ -25,6 +25,7 @@ class FiftyOneDatasetPublisher:
         except Exception as exc:
             return dataset_name, None, str(exc)
         try:
+            self._configure_database(fo)
             self._reset_dataset(fo, dataset_name)
             dataset = fo.Dataset(dataset_name)
             dataset.persistent = True
@@ -52,6 +53,16 @@ class FiftyOneDatasetPublisher:
             return dataset_name, None, str(exc)
         _SESSIONS[dataset_name] = session
         return dataset_name, f"http://localhost:{session.server_port}", None
+
+    def _configure_database(self, fo: Any) -> None:
+        database_uri = os.environ.get("FIFTYONE_DATABASE_URI", "").strip()
+        if not database_uri:
+            return
+        fo.config.database_uri = database_uri
+
+        import fiftyone.core.odm as odm
+
+        odm.establish_db_conn(fo.config)
 
     def _is_reusable_app_port_conflict(self, exc: Exception) -> bool:
         message = str(exc)

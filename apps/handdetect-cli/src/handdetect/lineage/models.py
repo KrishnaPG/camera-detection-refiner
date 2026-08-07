@@ -20,6 +20,9 @@ class ArtifactLineageRef(BaseModel):
     path: Path
     content_sha256: str
     dvc_hash: str | None = None
+    source_path: Path | None = None
+    source_content_sha256: str | None = None
+    snapshot_mode: str | None = None
 
 
 class TrackingLineageRef(BaseModel):

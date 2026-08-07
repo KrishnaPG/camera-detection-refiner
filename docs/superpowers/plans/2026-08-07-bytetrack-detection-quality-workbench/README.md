@@ -6,7 +6,7 @@
 
 **Architecture:** The adapter is a library-first pipeline with typed boundary parsers, Arrow/NumPy hot-path buffers, a ByteTrack association adapter, pluggable false-positive filters, immutable run storage, MLflow/DVC/Evidently experiment tracking, and static review outputs. The CLI is the first public entrypoint; batch/API/streaming/edge wrappers must reuse the same `AdapterPipeline.run_clip()` core contract.
 
-**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.2.6`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `opencv-python-headless==4.12.0.88`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==0.25.2`, `label-studio-sdk==2.1.0`, `fastapi==0.141.1`, `uvicorn==0.52.1`, `jinja2==3.1.6`, `pyyaml==6.0.3`, `tomlkit==0.15.1`, `python-multipart==0.0.32`.
+**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.2.6`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `plotly==5.24.1`, `opencv-python-headless==4.12.0.88`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==0.25.2`, `label-studio-sdk==2.1.0`, `fastapi==0.141.1`, `starlette==0.46.2`, `uvicorn==0.52.1`, `jinja2==3.1.6`, `pyyaml==6.0.3`, `tomlkit==0.15.1`, `python-multipart==0.0.32`.
 
 ## Global Constraints
 

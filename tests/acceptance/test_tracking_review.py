@@ -322,6 +322,37 @@ def test_fiftyone_publish_uses_configured_public_service_url(monkeypatch, tmp_pa
     assert dataset_name in fake_fiftyone._datasets
 
 
+def test_fiftyone_publish_initializes_configured_database_uri(monkeypatch, tmp_path) -> None:
+    run_root = _write_minimal_fiftyone_run(tmp_path)
+    fake_fiftyone = _fake_fiftyone_module()
+    fake_core = types.ModuleType("fiftyone.core")
+    fake_odm = types.ModuleType("fiftyone.core.odm")
+    established = []
+
+    def establish_db_conn(config: object) -> None:
+        established.append(config.database_uri)
+
+    fake_odm.establish_db_conn = establish_db_conn
+    fake_core.odm = fake_odm
+    fake_fiftyone.core = fake_core
+    monkeypatch.setitem(sys.modules, "fiftyone", fake_fiftyone)
+    monkeypatch.setitem(sys.modules, "fiftyone.core", fake_core)
+    monkeypatch.setitem(sys.modules, "fiftyone.core.odm", fake_odm)
+    monkeypatch.setenv("FIFTYONE_DATABASE_URI", "mongodb://fiftyone-mongo:27017/fiftyone")
+    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://localhost:5151")
+
+    dataset_name, url, error = FiftyOneDatasetPublisher().publish(
+        RunSuiteId("suite-a"),
+        RunId("run-a"),
+        run_root,
+    )
+
+    assert dataset_name == "handdetect_suite-a_run-a"
+    assert url == "http://localhost:5151"
+    assert error is None
+    assert established == ["mongodb://fiftyone-mongo:27017/fiftyone"]
+
+
 def test_fiftyone_publish_degrades_when_external_app_owns_port(monkeypatch, tmp_path) -> None:
     run_root = _write_minimal_fiftyone_run(tmp_path)
     fake_fiftyone = _fake_fiftyone_module()
@@ -433,6 +464,7 @@ def test_label_studio_project_title_fits_service_limit(tmp_path) -> None:
 def _fake_fiftyone_module() -> types.ModuleType:
     fake = types.ModuleType("fiftyone")
     fake._datasets = {}
+    fake.config = types.SimpleNamespace(database_uri=None)
 
     class FakeDataset:
         def __init__(self, name: str) -> None:

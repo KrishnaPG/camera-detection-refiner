@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 from decision_ledger.ledger import DecisionLedgerBuilder
 from dq_contracts.ids import RunId
 from dq_contracts.models import ValidatedClipPathSet
 from dq_filter_kit.geometric import GeometricFilterPipeline
+from dq_filter_kit.results import (
+    GeometricStageResult,
+    SelectedDetectionBlock,
+    TemporalStageResult,
+    TrackBlock,
+)
 from dq_filter_kit.temporal import TemporalFilterPipeline
 from handdetect_domain.config import ExperimentConfig
 from handdetect_io.parsers import JsonBoundaryParser
@@ -28,10 +35,27 @@ class ClipRunner:
     ) -> ClipRunSummary:
         bundle = JsonBoundaryParser().parse_clip(paths)
         block = ClipColumnBuilder().build(bundle)
-        geometric = GeometricFilterPipeline().run(block, experiment.adapter)
-        tracks = ByteTrackAssociationAdapter().associate(block, geometric, experiment.bytetrack)
-        temporal = TemporalFilterPipeline().run(block, tracks, experiment.adapter)
-        selected = MaxTwoSelector().select(block, tracks, temporal)
+        enabled_filters = {name.lower() for name in experiment.enabled_filters}
+        geometric = (
+            GeometricFilterPipeline().run(block, experiment.adapter)
+            if "geometric" in enabled_filters
+            else self._all_geometric_candidates(block)
+        )
+        tracks = (
+            ByteTrackAssociationAdapter().associate(block, geometric, experiment.bytetrack)
+            if "tracking" in enabled_filters or "bytetrack" in enabled_filters
+            else self._one_detection_tracks(block, geometric)
+        )
+        temporal = (
+            TemporalFilterPipeline().run(block, tracks, experiment.adapter)
+            if "temporal" in enabled_filters
+            else self._keep_all_tracks(block, tracks)
+        )
+        selected = (
+            MaxTwoSelector().select(block, tracks, temporal)
+            if "max_two" in enabled_filters or "selection" in enabled_filters
+            else self._select_all_temporal_survivors(block, tracks, temporal)
+        )
         decisions = DecisionLedgerBuilder().build(
             run_id, block, geometric, tracks, temporal, selected
         )
@@ -39,6 +63,58 @@ class ClipRunner:
             paths, run_id, block, tracks, temporal, selected, decisions, store
         )
         return clip_summary
+
+    def _all_geometric_candidates(self, block: object) -> GeometricStageResult:
+        count = block.xyxy.shape[0]
+        return GeometricStageResult(
+            clip_id=block.clip_id,
+            candidate_mask=np.ones(count, dtype=np.bool_),
+            reject_reason_code=np.zeros(count, dtype=np.int32),
+            merged_into_index=np.full(count, -1, dtype=np.int32),
+            geometry_area=None,
+            geometry_aspect=None,
+        )
+
+    def _one_detection_tracks(self, block: object, geometric: GeometricStageResult) -> TrackBlock:
+        source = np.flatnonzero(geometric.candidate_mask).astype(np.int32, copy=False)
+        return TrackBlock(
+            clip_id=block.clip_id,
+            source_detection_index=source,
+            track_id=source.copy(),
+            track_age_frames=np.ones(source.shape[0], dtype=np.int32),
+            track_score=block.confidence[source].astype(np.float32, copy=False),
+        )
+
+    def _keep_all_tracks(self, block: object, tracks: TrackBlock) -> TemporalStageResult:
+        return TemporalStageResult(
+            clip_id=block.clip_id,
+            keep_mask=np.ones(tracks.source_detection_index.shape[0], dtype=np.bool_),
+            reject_reason_code=np.zeros(tracks.source_detection_index.shape[0], dtype=np.int32),
+            track_id=tracks.track_id,
+            static_score=np.zeros(tracks.source_detection_index.shape[0], dtype=np.float32),
+        )
+
+    def _select_all_temporal_survivors(
+        self,
+        block: object,
+        tracks: TrackBlock,
+        temporal: TemporalStageResult,
+    ) -> SelectedDetectionBlock:
+        selected = np.zeros(block.frame_index.shape[0], dtype=np.bool_)
+        track_by_source = np.full(block.frame_index.shape[0], -1, dtype=np.int32)
+        rank_by_source = np.full(block.frame_index.shape[0], -1, dtype=np.int32)
+        live_positions = np.flatnonzero(temporal.keep_mask)
+        for position in live_positions:
+            source_index = int(tracks.source_detection_index[position])
+            selected[source_index] = True
+            track_by_source[source_index] = int(tracks.track_id[position])
+            rank_by_source[source_index] = 0
+        return SelectedDetectionBlock(
+            clip_id=block.clip_id,
+            selected_mask=selected,
+            track_id=track_by_source,
+            rank_in_frame=rank_by_source,
+        )
 
     def _write_artifacts(
         self,

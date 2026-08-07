@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import tomlkit
+from handdetect.lineage.capture import LineageSnapshotWriter
 from handdetect.lineage.replay import LineageReplayService
 from handdetect.runtime_paths import runs_root
 
@@ -129,6 +130,11 @@ def test_lineage_replay_uses_restored_worktree_inputs_and_main_run_roots(
         "_publish_child_review",
         lambda self, suite_id, run_id, config_path: None,
     )
+    monkeypatch.setattr(
+        LineageReplayService,
+        "_reexport_child_tracking",
+        lambda self, child_root: "mlflow-child",
+    )
 
     result = LineageReplayService().replay(
         "suite-parent/run-parent",
@@ -153,6 +159,7 @@ def test_lineage_replay_uses_restored_worktree_inputs_and_main_run_roots(
     )
     assert child_lock["parent"] == {"run_suite_id": "suite-parent", "run_id": "run-parent"}
     assert child_lock["restore_authority"] == "dvc_content_ref"
+    assert child_lock["tracking"]["mlflow_run_id"] == "mlflow-child"
     comparison = json.loads(
         (
             repo_root / "runs" / child_suite / child_run / "lineage" / "parent-comparison.json"
@@ -229,6 +236,11 @@ def test_lineage_replay_targets_parent_experiment_and_preserves_override_types(
         "_publish_child_review",
         lambda self, suite_id, run_id, config_path: None,
     )
+    monkeypatch.setattr(
+        LineageReplayService,
+        "_reexport_child_tracking",
+        lambda self, child_root: None,
+    )
 
     result = LineageReplayService().replay(
         "suite-parent/run-parent",
@@ -289,6 +301,11 @@ def test_lineage_replay_runs_dvc_restore_when_metadata_is_present(monkeypatch, t
         "_publish_child_review",
         lambda self, suite_id, run_id, config_path: None,
     )
+    monkeypatch.setattr(
+        LineageReplayService,
+        "_reexport_child_tracking",
+        lambda self, child_root: None,
+    )
 
     LineageReplayService().replay("suite-parent/run-parent", [])
 
@@ -324,6 +341,111 @@ def test_lineage_replay_does_not_symlink_missing_relative_inputs(monkeypatch, tm
 
     worktree_data = tmp_path / "tmp-root" / "replays" / "replay-no-symlink" / "worktree" / "data"
     assert not worktree_data.exists()
+
+
+def test_lineage_capture_snapshots_selected_clip_data(tmp_path, monkeypatch) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    labels_root = repo_root / "labels" / "versions" / "empty-gold-v1"
+    run_root = repo_root / "runs" / "suite-a" / "run-a"
+    config_path = repo_root / "configs" / "parent.toml"
+    for clip_id in ("clip-a", "clip-b", "clip-unused"):
+        clip_dir = data_root / clip_id
+        clip_dir.mkdir(parents=True)
+        (clip_dir / "hand_boxes.json").write_text(clip_id, encoding="utf-8")
+    labels_root.mkdir(parents=True)
+    (labels_root / "manifest.json").write_text("{}", encoding="utf-8")
+    (repo_root / "pyproject.toml").write_text("[project]\nname = 'fixture'\n", encoding="utf-8")
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("[runtime]\n", encoding="utf-8")
+    run_root.mkdir(parents=True)
+    (run_root / "tracking_export_status.json").write_text(
+        json.dumps({"mlflow": {"path": "mlruns", "run_id": "mlflow-parent"}}),
+        encoding="utf-8",
+    )
+    (run_root / "run-manifest.json").write_text(
+        json.dumps({"clip_ids": ["clip-a", "clip-b"]}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(repo_root)
+    LineageSnapshotWriter().write(
+        run_root=run_root,
+        suite_id="suite-a",
+        run_id="run-a",
+        config_path=config_path,
+        data_root=data_root,
+        label_set_path=labels_root,
+    )
+
+    lock = json.loads((run_root / "lineage" / "replay.lock.json").read_text(encoding="utf-8"))
+    snapshot_data = run_root / "lineage" / "source-snapshot" / "data"
+    assert lock["dataset"]["path"] == "data"
+    assert lock["dataset"]["snapshot_mode"] == "selected_clip_snapshot"
+    assert lock["dataset"]["source_path"] == str(data_root.resolve())
+    assert sorted(path.name for path in snapshot_data.iterdir()) == ["clip-a", "clip-b"]
+
+
+def test_reexport_child_tracking_includes_parent_deltas(monkeypatch, tmp_path) -> None:
+    child_root = tmp_path / "runs" / "suite-child" / "run-child"
+    child_root.mkdir(parents=True)
+    _write_child_run_artifacts(child_root, "suite-child", "run-child", "smoke")
+    (child_root / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "run_suite_id": "suite-child",
+                "run_id": "run-child",
+                "experiment_id": "smoke",
+                "config_sha256": "config-hash",
+                "clip_ids": ["clip-a"],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    _write_evaluation(child_root)
+    (child_root / "lineage").mkdir(exist_ok=True)
+    (child_root / "lineage" / "parent-comparison.json").write_text(
+        json.dumps({"metric_deltas": {"cleaned_detection_count": -2}}, indent=2),
+        encoding="utf-8",
+    )
+    summaries = []
+
+    class FakeMlflowTracker:
+        def __init__(self, tracking_uri: str) -> None:
+            self.tracking_uri = tracking_uri
+
+        def log_run(self, summary):
+            summaries.append(summary)
+            from experiment_tracking.export_status import PlatformStatus
+
+            return PlatformStatus(status="exported", path=self.tracking_uri, run_id="mlflow-delta")
+
+    class FakeTracker:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def log_run(self, summary):
+            from experiment_tracking.export_status import PlatformStatus
+
+            return PlatformStatus(status="exported", path="/tmp/fake")
+
+        def write(self, summary):
+            from experiment_tracking.export_status import PlatformStatus
+
+            return PlatformStatus(status="exported", path="/tmp/fake.html")
+
+    monkeypatch.setattr("handdetect.lineage.replay.MlflowExperimentTracker", FakeMlflowTracker)
+    monkeypatch.setattr("handdetect.lineage.replay.DvcLiveTracker", FakeTracker)
+    monkeypatch.setattr("handdetect.lineage.replay.EvidentlyReportWriter", FakeTracker)
+
+    mlflow_run_id = LineageReplayService()._reexport_child_tracking(child_root)
+
+    assert mlflow_run_id == "mlflow-delta"
+    assert summaries
+    metric_names = {metric.name: metric.value for metric in summaries[0].metrics}
+    assert metric_names["parent_delta_cleaned_detection_count"] == -2.0
+    assert (child_root / "tracking_export_status.json").exists()
 
 
 class _Completed:

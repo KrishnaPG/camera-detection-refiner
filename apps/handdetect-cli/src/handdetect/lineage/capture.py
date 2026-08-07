@@ -16,6 +16,8 @@ from handdetect.lineage.models import (
     TrackingLineageRef,
 )
 
+DEFAULT_SELECTED_DATA_SNAPSHOT_MAX_BYTES = 1024 * 1024 * 1024
+
 
 class LineageSnapshotWriter:
     def write(
@@ -32,9 +34,26 @@ class LineageSnapshotWriter:
             (run_root / "tracking_export_status.json").read_text(encoding="utf-8")
         )
         config_ref_path = self._portable_config_ref(config_path)
-        dataset_hash = self._tree_hash(data_root)
+        source_dataset_hash = self._tree_hash(data_root)
         labels_hash = self._tree_hash(label_set_path)
         config_hash = self._file_hash(config_path)
+        snapshot_root = run_root / "lineage" / "source-snapshot"
+        self._write_source_snapshot(
+            snapshot_root,
+            label_set_path,
+            config_path,
+            config_ref_path,
+            data_root,
+            self._run_clip_ids(run_root),
+        )
+        dataset_ref_path = data_root.resolve()
+        dataset_hash = source_dataset_hash
+        dataset_snapshot_mode = "verified_live_source"
+        snapshot_data_root = snapshot_root / "data"
+        if snapshot_data_root.exists() and any(snapshot_data_root.iterdir()):
+            dataset_ref_path = Path("data")
+            dataset_hash = self._tree_hash(snapshot_data_root)
+            dataset_snapshot_mode = "selected_clip_snapshot"
         lock = ReplayLock(
             run_suite_id=str(suite_id),
             run_id=str(run_id),
@@ -45,9 +64,12 @@ class LineageSnapshotWriter:
             ),
             dataset=ArtifactLineageRef(
                 logical_name="dataset",
-                path=data_root.resolve(),
+                path=dataset_ref_path,
                 content_sha256=dataset_hash,
                 dvc_hash=self._dvc_content_ref(dataset_hash),
+                source_path=data_root.resolve(),
+                source_content_sha256=source_dataset_hash,
+                snapshot_mode=dataset_snapshot_mode,
             ),
             labels=ArtifactLineageRef(
                 logical_name="labels",
@@ -68,12 +90,6 @@ class LineageSnapshotWriter:
             parent=parent,
         )
         output = run_root / "lineage" / "replay.lock.json"
-        self._write_source_snapshot(
-            run_root / "lineage" / "source-snapshot",
-            label_set_path,
-            config_path,
-            config_ref_path,
-        )
         self._write_dvc_lineage_refs(run_root / "lineage" / "dvc-lineage-refs.json", lock)
         output.write_text(lock.model_dump_json(indent=2), encoding="utf-8")
         return output
@@ -130,6 +146,8 @@ class LineageSnapshotWriter:
         label_set_path: Path,
         config_path: Path,
         config_ref_path: Path,
+        data_root: Path,
+        clip_ids: tuple[str, ...],
     ) -> None:
         snapshot_root.mkdir(parents=True, exist_ok=True)
         for name in ["apps", "packages", "handdetect", "configs", "labels"]:
@@ -140,6 +158,7 @@ class LineageSnapshotWriter:
             if target.exists():
                 shutil.rmtree(target)
             shutil.copytree(source, target)
+        self._copy_selected_data(data_root, snapshot_root / "data", clip_ids)
         self._copy_input_path(label_set_path, snapshot_root)
         self._copy_input_path(config_path, snapshot_root, config_ref_path)
         for name in ["pyproject.toml", "Makefile", "README.md"]:
@@ -171,10 +190,10 @@ class LineageSnapshotWriter:
             else:
                 target.unlink()
         if source.is_dir():
-            shutil.copytree(source, target)
+            shutil.copytree(source, target, copy_function=_copy2_or_link)
             return
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+        _copy2_or_link(source, target)
 
     def _portable_config_ref(self, config_path: Path) -> Path:
         if not config_path.is_absolute():
@@ -183,3 +202,51 @@ class LineageSnapshotWriter:
             return config_path.relative_to(Path.cwd())
         except ValueError:
             return Path("configs") / config_path.name
+
+    def _run_clip_ids(self, run_root: Path) -> tuple[str, ...]:
+        manifest_path = run_root / "run-manifest.json"
+        if not manifest_path.exists():
+            return ()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        clip_ids = manifest.get("clip_ids", [])
+        return tuple(str(clip_id) for clip_id in clip_ids if str(clip_id))
+
+    def _copy_selected_data(
+        self,
+        data_root: Path,
+        target_root: Path,
+        clip_ids: tuple[str, ...],
+    ) -> None:
+        if target_root.exists():
+            shutil.rmtree(target_root)
+        if not clip_ids:
+            return
+        selected_roots = tuple(data_root / clip_id for clip_id in clip_ids)
+        selected_bytes = sum(_path_size(path) for path in selected_roots if path.exists())
+        max_bytes = int(
+            os.environ.get(
+                "HANDDETECT_SELECTED_DATA_SNAPSHOT_MAX_BYTES",
+                str(DEFAULT_SELECTED_DATA_SNAPSHOT_MAX_BYTES),
+            )
+        )
+        if selected_bytes > max_bytes:
+            return
+        for source in selected_roots:
+            if not source.exists():
+                continue
+            shutil.copytree(source, target_root / source.name, copy_function=_copy2_or_link)
+
+
+def _copy2_or_link(source: Path, target: Path) -> None:
+    try:
+        os.link(source, target)
+    except OSError:
+        shutil.copy2(source, target)
+
+
+def _path_size(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    if not path.exists():
+        return 0
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())

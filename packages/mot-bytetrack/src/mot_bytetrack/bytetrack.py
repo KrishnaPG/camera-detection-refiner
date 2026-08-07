@@ -25,6 +25,7 @@ class ByteTrackTensorScratch:
             xyxy=self.xyxy[:length],
             confidence=self.confidence[:length],
             class_id=self.class_id[:length],
+            data={"source_detection_index": indexes.astype(np.int32, copy=False)},
         )
 
 
@@ -62,15 +63,16 @@ class ByteTrackAssociationAdapter(AssociationAdapter):
                 tracked.tracker_id
                 if tracked.tracker_id is not None
                 else np.full(
-                    frame_indexes.shape[0],
+                    len(tracked),
                     -1,
                     dtype=np.int32,
                 )
             )
+            tracked_source_indexes = tracked.get_data("source_detection_index")
             for local_index, tracker_id in enumerate(tracked_ids.tolist()):
                 if int(tracker_id) < 0:
                     continue
-                source_indexes.append(int(frame_indexes[local_index]))
+                source_indexes.append(int(tracked_source_indexes[local_index]))
                 track_ids.append(int(tracker_id))
                 ages.append(self._track_age(track_ids, int(tracker_id)))
                 scores.append(float(tracked.confidence[local_index]))
