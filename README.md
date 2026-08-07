@@ -1,0 +1,13 @@
+# HandDetect Quality Workbench
+
+`docker compose up -d` starts the local workbench at `http://localhost:8000` and MLflow at `http://localhost:5000`.
+
+Use the workbench UI to trigger a smoke run, inspect artifacts, and replay prior runs. CLI equivalents:
+
+```bash
+make seed
+make run CONFIG=configs/smoke-experiment.toml
+python -m handdetect.cli.main review open --suite-id <suite_id> --run-id <run_id>
+```
+
+No hardcoded application credentials are required in the default local setup.

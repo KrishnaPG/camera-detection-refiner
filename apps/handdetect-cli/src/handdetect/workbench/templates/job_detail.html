@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Smoke Job {{ job_id }}</title>
+    {% if not is_complete %}
+    <meta http-equiv="refresh" content="2" />
+    {% endif %}
+  </head>
+  <body>
+    <h1>Smoke Job {{ job_id }}</h1>
+    <p><a href="/">Back to runs</a></p>
+    <p>Status: {% if is_complete %}complete{% else %}running{% endif %}</p>
+    {% if exit_code is not none %}
+    <p>Exit code: {{ exit_code }}</p>
+    {% endif %}
+    {% if can_open_run %}
+    <p><a href="/runs/{{ suite_id }}/{{ run_id }}">Open run {{ suite_id }}/{{ run_id }}</a></p>
+    {% endif %}
+    <pre>{{ log_text }}</pre>
+  </body>
+</html>

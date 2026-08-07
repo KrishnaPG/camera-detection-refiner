@@ -1,0 +1,47 @@
+services:
+  workbench:
+    image: handdetect-app:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/workbench
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
+        exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
+          python -m handdetect.cli.main workbench serve --host 0.0.0.0 --port 8000
+    environment:
+      HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
+      HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+    ports:
+      - "8000:8000"
+      - "5151:5151"
+    volumes:
+      - .:/workspace
+      - /tmp/handdetect:/tmp/handdetect
+    working_dir: /workspace
+
+  mlflow:
+    image: handdetect-app:local
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
+        exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
+          mlflow ui --backend-store-uri file:/tmp/handdetect/mlruns --host 0.0.0.0 --port 5000
+    environment:
+      MLFLOW_ALLOW_FILE_STORE: "true"
+      HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
+      HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/workspace
+      - /tmp/handdetect:/tmp/handdetect
+    working_dir: /workspace

@@ -104,7 +104,7 @@ dependencies = [
   "label-studio-sdk==2.1.0",
   "mlflow==3.15.1",
   "numpy==2.5.1",
-  "opencv-python-headless==5.0.0.93",
+  "opencv-python-headless==4.12.0.88",
   "opentelemetry-sdk==1.44.0",
   "polars==1.43.2",
   "prometheus-client==0.26.0",

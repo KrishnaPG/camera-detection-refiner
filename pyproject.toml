@@ -1,0 +1,93 @@
+[build-system]
+requires = ["hatchling==1.28.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "handdetect-quality"
+version = "0.1.0"
+description = "ByteTrack-backed hand detection quality workbench"
+requires-python = ">=3.12"
+dependencies = [
+  "dvc==3.67.1",
+  "dvclive==3.49.1",
+  "evidently==0.7.21",
+  "fastapi==0.141.1",
+  "fiftyone==0.25.2",
+  "jinja2==3.1.6",
+  "label-studio-sdk==2.1.0",
+  "mlflow==3.15.1",
+  "numpy==2.2.6",
+  "opencv-python-headless==4.12.0.88",
+  "opentelemetry-sdk==1.44.0",
+  "polars==1.43.2",
+  "prometheus-client==0.26.0",
+  "pyarrow==25.0.0",
+  "pydantic==2.13.4",
+  "pyyaml==6.0.3",
+  "python-multipart==0.0.32",
+  "structlog==26.1.0",
+  "supervision==0.30.0",
+  "tomlkit==0.15.1",
+  "trackers==2.6.0",
+  "typer==0.27.1",
+  "uvicorn==0.52.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy==2.3.0",
+  "pytest==9.0.2",
+  "pytest-xdist==3.8.0",
+  "ruff==0.16.1",
+]
+
+[project.scripts]
+handdetect = "handdetect.cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "apps/handdetect-cli/src/handdetect",
+  "packages/decision-ledger/src/decision_ledger",
+  "packages/dq-boundaries/src/dq_boundaries",
+  "packages/dq-contracts/src/dq_contracts",
+  "packages/dq-filter-kit/src/dq_filter_kit",
+  "packages/dq-observability/src/dq_observability",
+  "packages/dq-resources/src/dq_resources",
+  "packages/evaluation-regression/src/evaluation_regression",
+  "packages/experiment-runner/src/experiment_runner",
+  "packages/experiment-tracking/src/experiment_tracking",
+  "packages/handdetect-domain/src/handdetect_domain",
+  "packages/handdetect-io/src/handdetect_io",
+  "packages/handdetect-policies/src/handdetect_policies",
+  "packages/label-versions/src/label_versions",
+  "packages/lineage-replay/src/lineage_replay",
+  "packages/mot-bytetrack/src/mot_bytetrack",
+  "packages/mot-interfaces/src/mot_interfaces",
+  "packages/platform-review/src/platform_review",
+  "packages/replay-workbench/src/replay_workbench",
+  "packages/review-journey/src/review_journey",
+  "packages/run-artifacts/src/run_artifacts",
+  "packages/vision-columnar/src/vision_columnar",
+  "packages/vision-geometry/src/vision_geometry",
+  "packages/visual-reporting/src/visual_reporting",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+exclude = ["tests"]

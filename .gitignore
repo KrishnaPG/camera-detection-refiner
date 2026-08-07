@@ -1,1 +1,13 @@
 data
+runs
+mlruns
+labels
+
+.agents
+.codex
+.dvc
+.handdetect
+.pytest_cache
+.superpowers
+
+__pycache__

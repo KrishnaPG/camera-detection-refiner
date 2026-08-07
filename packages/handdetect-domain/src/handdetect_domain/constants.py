@@ -1,0 +1,10 @@
+from __future__ import annotations
+
+FRAME_WIDTH_PX = 1920
+FRAME_HEIGHT_PX = 1200
+DATASET_FPS = 30.0
+MAX_HANDS_PER_FRAME = 2
+BYTE_TRACK_CLASS_ID = 0
+AUDIT_JSONL_SUFFIX = ".jsonl"
+CLEANED_JSON_SUFFIX = ".json"
+PARQUET_SUFFIX = ".parquet"
