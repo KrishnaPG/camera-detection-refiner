@@ -1,6 +1,7 @@
 /data
 /runs
 /mlruns
+/external
 
 .agents
 .codex

@@ -35,6 +35,10 @@ def tracking_review_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HANDDETECT_KEEP_SUITES", "100")
     monkeypatch.setenv("HANDDETECT_MIN_FREE_BYTES", "0")
     monkeypatch.setenv("HANDDETECT_MAX_RUNTIME_BYTES", "999999999999")
+    monkeypatch.setenv("HANDDETECT_WORKBENCH_PUBLIC_URL", "http://10.7.0.4:60050")
+    monkeypatch.setenv("HANDDETECT_MLFLOW_PUBLIC_URL", "http://10.7.0.4:60900")
+    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://10.7.0.4:60901")
+    monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "http://10.7.0.4:60902")
     _SESSIONS.clear()
 
 
@@ -100,7 +104,16 @@ def test_tracking_exports_and_review_manifest_are_available() -> None:
         "DVCLive metrics exported; replay.lock.json carries DVC-style content refs." in report_html
     )
     assert "not yet generated" not in report_html
-    assert "http://localhost:5000" in report_html
+    assert "http://10.7.0.4:60900" in report_html
+    assert "report/visual-review.html" in report_html
+    visual_review = (run_root / "report" / "visual-review.html").read_text(encoding="utf-8")
+    assert "Raw detections" in visual_review
+    assert "Kept output" in visual_review
+    assert "Rejected or merged" in visual_review
+    assert "Track" in visual_review
+    assert list((run_root / "report" / "overlays").glob("*_raw.png"))
+    assert list((run_root / "report" / "overlays").glob("*_kept.png"))
+    assert list((run_root / "report" / "overlays").glob("*_rejected.png"))
     history = pq.read_table(runs_root() / "index" / "metric_history.parquet").to_pydict()
     assert suite_id in history["run_suite_id"]
 
@@ -146,6 +159,7 @@ def test_lineage_replay_publishes_review_platform_manifest() -> None:
 
 
 def test_review_launcher_falls_back_when_fiftyone_runtime_breaks(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("HANDDETECT_FIFTYONE_PUBLIC_URL", raising=False)
     suite_id = "suite-20260807-000010"
     run_id = "run-20260807-000010"
     run_root = tmp_path / "runs" / suite_id / run_id
@@ -205,6 +219,9 @@ def test_review_launcher_falls_back_when_fiftyone_runtime_breaks(monkeypatch, tm
             self.name = name
             self.persistent = False
 
+        def clear(self) -> None:
+            return None
+
         def add_sample(self, sample: object) -> None:
             raise AssertionError(f"unexpected sample: {sample!r}")
 
@@ -231,6 +248,7 @@ def test_review_launcher_falls_back_when_fiftyone_runtime_breaks(monkeypatch, tm
     fake_fiftyone.Detections = object
     fake_fiftyone.Detection = object
     fake_fiftyone.dataset_exists = fake_dataset_exists
+    fake_fiftyone.load_dataset = lambda name: FakeDataset(name)
     fake_fiftyone.delete_dataset = fake_delete_dataset
     fake_fiftyone.launch_app = fake_launch_app
     monkeypatch.setitem(sys.modules, "fiftyone", fake_fiftyone)
@@ -240,7 +258,7 @@ def test_review_launcher_falls_back_when_fiftyone_runtime_breaks(monkeypatch, tm
         data_root=tmp_path / "data",
         runs_root=tmp_path / "runs",
         max_clip_workers=1,
-        mlflow_tracking_uri="http://localhost:5000",
+        mlflow_tracking_uri="http://10.7.0.4:60900",
         dvclive_root=tmp_path / "dvclive",
         evidently_root=tmp_path / "evidently",
         workbench_host="127.0.0.1",
@@ -268,7 +286,7 @@ def test_fiftyone_publish_handles_decisions_without_frame_column(monkeypatch, tm
     )
 
     assert dataset_name == "handdetect_suite-a_run-a"
-    assert url == "http://localhost:5151"
+    assert url == "http://10.7.0.4:60901/datasets/handdetect_suite-a_run-a"
     assert error is None
     dataset = fake_fiftyone._datasets[dataset_name]
     assert len(dataset.samples) == 1
@@ -276,6 +294,7 @@ def test_fiftyone_publish_handles_decisions_without_frame_column(monkeypatch, tm
 
 
 def test_fiftyone_publish_reuses_existing_app_when_port_is_bound(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("HANDDETECT_FIFTYONE_PUBLIC_URL", raising=False)
     run_root = _write_minimal_fiftyone_run(tmp_path)
     fake_fiftyone = _fake_fiftyone_module()
     _SESSIONS["existing"] = fake_fiftyone.FakeSession()
@@ -293,7 +312,7 @@ def test_fiftyone_publish_reuses_existing_app_when_port_is_bound(monkeypatch, tm
     )
 
     assert dataset_name == "handdetect_suite-a_run-a"
-    assert url == "http://localhost:5151"
+    assert url == "http://127.0.0.1:5151/datasets/handdetect_suite-a_run-a"
     assert error is None
     assert dataset_name in fake_fiftyone._datasets
     assert _SESSIONS["existing"].dataset is fake_fiftyone._datasets[dataset_name]
@@ -308,7 +327,7 @@ def test_fiftyone_publish_uses_configured_public_service_url(monkeypatch, tmp_pa
 
     fake_fiftyone.launch_app = fail_launch_app
     monkeypatch.setitem(sys.modules, "fiftyone", fake_fiftyone)
-    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://localhost:5151/")
+    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://10.7.0.4:60901/")
 
     dataset_name, url, error = FiftyOneDatasetPublisher().publish(
         RunSuiteId("suite-a"),
@@ -317,7 +336,7 @@ def test_fiftyone_publish_uses_configured_public_service_url(monkeypatch, tmp_pa
     )
 
     assert dataset_name == "handdetect_suite-a_run-a"
-    assert url == "http://localhost:5151"
+    assert url == "http://10.7.0.4:60901/datasets/handdetect_suite-a_run-a"
     assert error is None
     assert dataset_name in fake_fiftyone._datasets
 
@@ -339,7 +358,7 @@ def test_fiftyone_publish_initializes_configured_database_uri(monkeypatch, tmp_p
     monkeypatch.setitem(sys.modules, "fiftyone.core", fake_core)
     monkeypatch.setitem(sys.modules, "fiftyone.core.odm", fake_odm)
     monkeypatch.setenv("FIFTYONE_DATABASE_URI", "mongodb://fiftyone-mongo:27017/fiftyone")
-    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://localhost:5151")
+    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://10.7.0.4:60901")
 
     dataset_name, url, error = FiftyOneDatasetPublisher().publish(
         RunSuiteId("suite-a"),
@@ -348,12 +367,13 @@ def test_fiftyone_publish_initializes_configured_database_uri(monkeypatch, tmp_p
     )
 
     assert dataset_name == "handdetect_suite-a_run-a"
-    assert url == "http://localhost:5151"
+    assert url == "http://10.7.0.4:60901/datasets/handdetect_suite-a_run-a"
     assert error is None
     assert established == ["mongodb://fiftyone-mongo:27017/fiftyone"]
 
 
 def test_fiftyone_publish_degrades_when_external_app_owns_port(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("HANDDETECT_FIFTYONE_PUBLIC_URL", raising=False)
     run_root = _write_minimal_fiftyone_run(tmp_path)
     fake_fiftyone = _fake_fiftyone_module()
 
@@ -473,6 +493,9 @@ def _fake_fiftyone_module() -> types.ModuleType:
             self.persistent = False
             fake._datasets[name] = self
 
+        def clear(self) -> None:
+            self.samples.clear()
+
         def add_sample(self, sample: FakeSample) -> None:
             self.samples.append(sample)
 
@@ -501,7 +524,8 @@ def _fake_fiftyone_module() -> types.ModuleType:
     fake.Sample = FakeSample
     fake.Detections = FakeDetections
     fake.Detection = FakeDetection
-    fake.dataset_exists = lambda name: False
+    fake.dataset_exists = lambda name: name in fake._datasets
+    fake.load_dataset = lambda name: fake._datasets[name]
     fake.delete_dataset = lambda name: None
     fake.launch_app = lambda dataset, address, port, remote, auto: FakeSession()
     return fake

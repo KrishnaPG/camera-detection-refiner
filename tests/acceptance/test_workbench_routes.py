@@ -4,20 +4,29 @@ import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from handdetect.workbench.server import create_app, parse_run_ids
+from handdetect.workbench.server import (
+    allowed_cors_origins,
+    create_app,
+    parse_run_ids,
+    self_contained_job_script,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_workbench_index_renders_operator_entrypoints(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HANDDETECT_WORKBENCH_PUBLIC_URL", "http://10.7.0.4:60050")
+    monkeypatch.setenv("HANDDETECT_MLFLOW_PUBLIC_URL", "http://10.7.0.4:60900")
+    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://10.7.0.4:60901")
+    monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "http://10.7.0.4:60902")
     response = TestClient(create_app()).get("/")
     assert response.status_code == 200
     assert "HandDetect Workbench" in response.text
-    assert "http://localhost:8000" in response.text
-    assert "http://localhost:5000" in response.text
-    assert "http://localhost:5151" in response.text
-    assert "http://localhost:8080" in response.text
+    assert "http://10.7.0.4:60050" in response.text
+    assert "http://10.7.0.4:60900" in response.text
+    assert "http://10.7.0.4:60901" in response.text
+    assert "http://10.7.0.4:60902" in response.text
     assert "Run Smoke Experiment" in response.text
 
 
@@ -50,10 +59,10 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
         json.dumps(
             {
                 "report": {"url": "/artifacts/report/index.html"},
-                "mlflow": {"status": "ready", "url": "http://localhost:5000"},
+                "mlflow": {"status": "ready", "url": "http://10.7.0.4:60900"},
                 "dvc": {"status": "exported", "path": "dvclive/run"},
                 "evidently": {"status": "ready", "url": "/artifacts/report/evidently.html"},
-                "fiftyone": {"status": "ready", "url": "http://localhost:5151"},
+                "fiftyone": {"status": "ready", "url": "http://10.7.0.4:60901"},
                 "label_studio": {
                     "status": "ready",
                     "url": "/artifacts/review/labelstudio-tasks.json",
@@ -68,8 +77,10 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
     assert response.status_code == 200
     assert f"{suite_id}/{run_id}" in response.text
     assert "Static report" in response.text
-    assert "http://localhost:5000" in response.text
-    assert "http://localhost:5151" in response.text
+    assert "Visual review" in response.text
+    assert f"/artifacts/{suite_id}/{run_id}/report/visual-review.html" in response.text
+    assert "http://10.7.0.4:60900" in response.text
+    assert "http://10.7.0.4:60901" in response.text
     assert "Open Review Platforms" in response.text
     assert "Replay With Override" in response.text
 
@@ -215,6 +226,29 @@ def test_workbench_job_detail_hides_run_link_for_failed_job(monkeypatch, tmp_pat
     assert "No such file or directory" in response.text
     assert "git" in response.text
     assert "Open run" not in response.text
+
+
+def test_smoke_job_log_reports_public_workbench_url(tmp_path) -> None:
+    script = self_contained_job_script(
+        tmp_path / "job.log",
+        tmp_path / "job.exit",
+    )
+
+    assert "HANDDETECT_WORKBENCH_PUBLIC_URL" in script
+    assert "public_url" in script
+    assert "response.geturl()" not in script
+
+
+def test_workbench_allows_review_platform_origins(monkeypatch) -> None:
+    monkeypatch.setenv("HANDDETECT_WORKBENCH_PUBLIC_URL", "http://10.7.0.4:60050")
+    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://10.7.0.4:60901")
+    monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "http://10.7.0.4:60902")
+
+    assert allowed_cors_origins() == [
+        "http://10.7.0.4:60050",
+        "http://10.7.0.4:60901",
+        "http://10.7.0.4:60902",
+    ]
 
 
 def test_runtime_state_root_defaults_to_tmp(monkeypatch) -> None:

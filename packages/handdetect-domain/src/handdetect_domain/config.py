@@ -39,6 +39,9 @@ class RuntimeConfig(BaseModel):
     evidently_root: Path
     workbench_host: str = "127.0.0.1"
     workbench_port: int = Field(default=8000, ge=1, le=65535)
+    workbench_public_url: str = ""
+    mlflow_public_url: str = ""
+    fiftyone_public_url: str = ""
     label_studio_url: str = ""
     label_studio_public_url: str = ""
     label_studio_token: str = ""

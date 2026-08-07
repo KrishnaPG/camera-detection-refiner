@@ -95,8 +95,11 @@ def test_lineage_replay_uses_restored_worktree_inputs_and_main_run_roots(
             assert Path(str(runtime["evidently_root"])) == repo_root / "runs" / "evidently"
             assert str(runtime["mlflow_tracking_uri"]).endswith("/mlruns")
             assert Path(str(runtime["dvclive_root"])).name == "dvclive"
+            assert str(runtime["workbench_public_url"]) == "http://10.7.0.4:60050"
+            assert str(runtime["mlflow_public_url"]) == "http://10.7.0.4:60900"
+            assert str(runtime["fiftyone_public_url"]) == "http://10.7.0.4:60901"
             assert str(runtime["label_studio_url"]) == "http://labelstudio.internal"
-            assert str(runtime["label_studio_public_url"]) == "http://localhost:8080"
+            assert str(runtime["label_studio_public_url"]) == "http://10.7.0.4:60902"
             assert str(runtime["label_studio_token"]) == "token"
             assert document["experiments"][0]["adapter"]["max_center_speed_px_per_s"] == 3900.0
             child_lock = (
@@ -120,8 +123,11 @@ def test_lineage_replay_uses_restored_worktree_inputs_and_main_run_roots(
     monkeypatch.chdir(repo_root)
     monkeypatch.setenv("HANDDETECT_TMP_ROOT", str(tmp_path / "tmp-root"))
     monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(repo_root / "runs"))
+    monkeypatch.setenv("HANDDETECT_WORKBENCH_PUBLIC_URL", "http://10.7.0.4:60050")
+    monkeypatch.setenv("HANDDETECT_MLFLOW_PUBLIC_URL", "http://10.7.0.4:60900")
+    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://10.7.0.4:60901")
     monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_URL", "http://labelstudio.internal")
-    monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "http://localhost:8080")
+    monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "http://10.7.0.4:60902")
     monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_TOKEN", "token")
     monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(LineageReplayService, "_replay_id", lambda self: "replay-001")

@@ -150,6 +150,9 @@ class LineageReplayService:
 
     def _apply_review_runtime_env_overrides(self, runtime: tomlkit.items.Table) -> None:
         env_map = {
+            "HANDDETECT_WORKBENCH_PUBLIC_URL": "workbench_public_url",
+            "HANDDETECT_MLFLOW_PUBLIC_URL": "mlflow_public_url",
+            "HANDDETECT_FIFTYONE_PUBLIC_URL": "fiftyone_public_url",
             "HANDDETECT_LABEL_STUDIO_URL": "label_studio_url",
             "HANDDETECT_LABEL_STUDIO_PUBLIC_URL": "label_studio_public_url",
             "HANDDETECT_LABEL_STUDIO_TOKEN": "label_studio_token",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from html import escape
 from pathlib import Path
 
@@ -19,8 +20,17 @@ class StaticReportBuilder:
         platform_hint = "available" if platforms_path.exists() else "not yet generated"
         platforms = self._load_platforms(platforms_path)
         platform_links = self._platform_links(platforms)
-        run_page_url = f"http://localhost:8000/runs/{manifest['run_suite_id']}/{manifest['run_id']}"
-        run_page_path = f"/runs/{manifest['run_suite_id']}/{manifest['run_id']}"
+        workbench_public_url = os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", "").strip()
+        if not workbench_public_url:
+            workbench_public_url = "http://127.0.0.1:8000"
+        suite_id = manifest["run_suite_id"]
+        run_id = manifest["run_id"]
+        run_page_url = f"{workbench_public_url.rstrip('/')}/runs/{suite_id}/{run_id}"
+        visual_review_url = (
+            f"{workbench_public_url.rstrip('/')}/artifacts/{suite_id}/{run_id}"
+            "/report/visual-review.html"
+        )
+        run_page_path = f"/runs/{suite_id}/{run_id}"
 
         html = f"""<!doctype html>
 <html lang=\"en\">
@@ -66,6 +76,10 @@ class StaticReportBuilder:
       <section>
         <h2>Review Journey</h2>
         <p>Platform manifest: <code>review/platforms.json</code> ({platform_hint}).</p>
+        <p>
+          Visual review:
+          <a href="{visual_review_url}">annotated images, decisions, and tracks</a>
+        </p>
         {platform_links}
         <p>Workbench: <a href="{run_page_url}">run page</a></p>
       </section>
@@ -75,7 +89,7 @@ class StaticReportBuilder:
           <li><code>cleaned/*.json</code></li>
           <li><code>audit/*.jsonl</code></li>
           <li><code>tables/*.parquet</code></li>
-          <li><code>report/contact-sheet.html</code></li>
+          <li><code>report/visual-review.html</code></li>
         </ul>
       </section>
       <section>

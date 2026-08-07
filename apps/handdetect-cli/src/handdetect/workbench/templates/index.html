@@ -6,10 +6,16 @@
   </head>
   <body>
     <h1>HandDetect Workbench</h1>
-    <p>Workbench: <a href="http://localhost:8000">http://localhost:8000</a></p>
-    <p>MLflow: <a href="http://localhost:5000">http://localhost:5000</a></p>
-    <p>FiftyOne: <a href="http://localhost:5151">http://localhost:5151</a></p>
-    <p>Label Studio: <a href="http://localhost:8080">http://localhost:8080</a></p>
+    <p>Workbench: <a href="{{ service_links.workbench }}">{{ service_links.workbench }}</a></p>
+    {% if service_links.mlflow %}
+    <p>MLflow: <a href="{{ service_links.mlflow }}">{{ service_links.mlflow }}</a></p>
+    {% endif %}
+    {% if service_links.fiftyone %}
+    <p>FiftyOne: <a href="{{ service_links.fiftyone }}">{{ service_links.fiftyone }}</a></p>
+    {% endif %}
+    {% if service_links.label_studio %}
+    <p>Label Studio: <a href="{{ service_links.label_studio }}">{{ service_links.label_studio }}</a></p>
+    {% endif %}
     <form method="post" action="/run-smoke">
       <button type="submit">Run Smoke Experiment</button>
     </form>

@@ -11,13 +11,15 @@
     <ul>
       {% if platforms %}
       <li><a href="{{ platforms.report.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/index.html') }}">Static report</a></li>
-      <li><a href="{{ platforms.mlflow.url or 'http://localhost:5000' }}">MLflow UI</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html">Visual review</a></li>
+      <li>MLflow UI{% if platforms.mlflow.url %}: <a href="{{ platforms.mlflow.url }}">{{ platforms.mlflow.url }}</a>{% endif %}</li>
       <li><a href="{{ platforms.evidently.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/evidently.html') }}">Evidently report</a></li>
       <li><a href="{{ platforms.fiftyone.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/fiftyone-dataset.json') }}">FiftyOne</a></li>
       <li><a href="{{ platforms.label_studio.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/labelstudio-tasks.json') }}">Label Studio</a></li>
       {% else %}
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/index.html">Static report</a></li>
-      <li><a href="http://localhost:5000">MLflow UI</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html">Visual review</a></li>
+      <li>MLflow UI</li>
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/evidently.html">Evidently report</a></li>
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/fiftyone-dataset.json">FiftyOne dataset manifest</a></li>
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/labelstudio-tasks.json">Label Studio tasks</a></li>

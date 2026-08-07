@@ -34,5 +34,5 @@ class MlflowExperimentTracker:
             status="exported",
             path=str(Path(self.tracking_uri)),
             run_id=run_id,
-            url="http://localhost:5000",
+            url=os.environ.get("HANDDETECT_MLFLOW_PUBLIC_URL", "").strip() or None,
         )

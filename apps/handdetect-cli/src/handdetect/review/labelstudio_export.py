@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import cv2
@@ -8,7 +9,10 @@ import pyarrow.parquet as pq
 
 
 class LabelStudioExporter:
-    def export_tasks(self, run_root: Path, base_url: str = "http://localhost:8000") -> Path:
+    def export_tasks(self, run_root: Path, base_url: str | None = None) -> Path:
+        resolved_base_url = base_url or os.environ.get(
+            "HANDDETECT_WORKBENCH_PUBLIC_URL", "http://127.0.0.1:8000"
+        )
         manifest = json.loads(
             (run_root / "report" / "sample-manifest.json").read_text(encoding="utf-8")
         )
@@ -20,7 +24,8 @@ class LabelStudioExporter:
                     "id": index,
                     "data": {
                         "image": (
-                            f"{base_url}/artifacts/{run_manifest['run_suite_id']}/{run_manifest['run_id']}"
+                            f"{resolved_base_url.rstrip('/')}/artifacts/"
+                            f"{run_manifest['run_suite_id']}/{run_manifest['run_id']}"
                             f"/report/samples/{sample['image_name']}"
                         ),
                         "clip_id": sample["clip_id"],
