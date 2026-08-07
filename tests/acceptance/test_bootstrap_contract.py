@@ -48,6 +48,16 @@ def test_dockerignore_only_excludes_root_runtime_dirs() -> None:
     assert "\nruns\n" not in dockerignore
 
 
+def test_gitignore_only_excludes_root_runtime_dirs() -> None:
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    gitignore_lines = gitignore.splitlines()
+    assert "/data" in gitignore_lines
+    assert "/runs" in gitignore_lines
+    assert "/mlruns" in gitignore_lines
+    assert "data" not in gitignore_lines
+    assert "runs" not in gitignore_lines
+
+
 def test_default_configs_route_runtime_state_to_tmp() -> None:
     for path in [
         ROOT / "configs" / "default-experiments.toml",
@@ -181,9 +191,22 @@ def test_compose_prepares_tmp_state_then_drops_to_host_uid() -> None:
     assert "HANDDETECT_COMPOSE_UID" in compose
     assert "HANDDETECT_COMPOSE_GID" in compose
     assert "chown -R" in compose
+    assert (
+        'chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect'
+        not in compose
+    )
     assert "USER=handdetect" in compose
     assert "LOGNAME=handdetect" in compose
     assert "setpriv --reuid" in compose
+
+
+def test_label_studio_compose_enables_token_and_recovers_generated_sqlite_state() -> None:
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "LABEL_STUDIO_USER_TOKEN" in compose
+    assert "--enable-legacy-api-token" in compose
+    assert "legacy_api_tokens_enabled=True" in compose
+    assert "resetting generated Label Studio SQLite state after local migration failure" in compose
+    assert "rm -f /label-studio/data/label_studio.sqlite3" in compose
 
 
 def test_dockerfile_does_not_require_runtime_git_safe_directory() -> None:

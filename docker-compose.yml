@@ -11,7 +11,14 @@ services:
       - -lc
       - |
         mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/runs /tmp/handdetect/evidently /tmp/handdetect/workbench
-        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
+          /tmp/handdetect/home \
+          /tmp/handdetect/cache \
+          /tmp/handdetect/mlruns \
+          /tmp/handdetect/dvclive \
+          /tmp/handdetect/runs \
+          /tmp/handdetect/evidently \
+          /tmp/handdetect/workbench
         export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
         exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
           python -m handdetect.cli.main workbench serve --host 0.0.0.0 --port 8000
@@ -45,7 +52,10 @@ services:
       - -lc
       - |
         mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns
-        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
+          /tmp/handdetect/home \
+          /tmp/handdetect/cache \
+          /tmp/handdetect/mlruns
         export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
         exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
           mlflow ui --backend-store-uri file:/tmp/handdetect/mlruns --host 0.0.0.0 --port 5000
@@ -71,34 +81,60 @@ services:
     image: heartexlabs/label-studio:1.21.0
     user: "0:0"
     command:
-      - sh
+      - bash
       - -lc
       - |
-        (
+        set -o pipefail
+
+        start_label_studio() {
+          /label-studio/.venv/bin/label-studio start \
+            --no-browser \
+            --internal-host 0.0.0.0 \
+            --port 8080 \
+            --host http://localhost:8080 \
+            --username "$$LABEL_STUDIO_USERNAME" \
+            --password "$$LABEL_STUDIO_PASSWORD" \
+            --user-token "$$LABEL_STUDIO_USER_TOKEN" \
+            --enable-legacy-api-token 2>&1 | tee /tmp/label-studio-start.log
+          return "$${PIPESTATUS[0]}"
+        }
+
+        enable_legacy_api_tokens_after_start() {
           for attempt in $$(seq 1 60); do
-            if printf '%s\n' \
-              'from jwt_auth.models import JWTSettings' \
-              'updated = JWTSettings.objects.update(legacy_api_tokens_enabled=True)' \
-              'print(f"legacy_api_tokens_enabled=true rows={updated}")' \
-              | /label-studio/.venv/bin/label-studio shell >/tmp/label-studio-bootstrap.log 2>&1; then
-              cat /tmp/label-studio-bootstrap.log
-              exit 0
+            if curl -fsS -o /dev/null http://127.0.0.1:8080/; then
+              if printf '%s\n' \
+                'from jwt_auth.models import JWTSettings' \
+                'updated = JWTSettings.objects.update(legacy_api_tokens_enabled=True)' \
+                'print(f"legacy_api_tokens_enabled=true rows={updated}")' \
+                | /label-studio/.venv/bin/label-studio shell >/tmp/label-studio-bootstrap.log 2>&1; then
+                cat /tmp/label-studio-bootstrap.log
+                exit 0
+              fi
             fi
             sleep 2
           done
           cat /tmp/label-studio-bootstrap.log || true
           echo "failed to enable Label Studio legacy API token mode" >&2
           exit 1
-        ) &
-        exec /label-studio/.venv/bin/label-studio start \
-          --no-browser \
-          --internal-host 0.0.0.0 \
-          --port 8080 \
-          --host http://localhost:8080 \
-          --username "$$LABEL_STUDIO_USERNAME" \
-          --password "$$LABEL_STUDIO_PASSWORD" \
-          --user-token "$$LABEL_STUDIO_USER_TOKEN" \
-          --enable-legacy-api-token
+        }
+
+        for attempt in 1 2; do
+          rm -f /tmp/label-studio-start.log
+          enable_legacy_api_tokens_after_start &
+          bootstrap_pid="$$!"
+          start_label_studio
+          status="$$?"
+          kill "$$bootstrap_pid" 2>/dev/null || true
+
+          if [ "$$attempt" = "1" ] \
+            && grep -Eq "django.db.utils.OperationalError|duplicate column name" /tmp/label-studio-start.log; then
+            echo "resetting generated Label Studio SQLite state after local migration failure" >&2
+            rm -f /label-studio/data/label_studio.sqlite3 /label-studio/data/label_studio.sqlite3-*
+            continue
+          fi
+
+          exit "$$status"
+        done
     environment:
       LABEL_STUDIO_USERNAME: "${LABEL_STUDIO_USERNAME:-handdetect@example.local}"
       LABEL_STUDIO_PASSWORD: "${LABEL_STUDIO_PASSWORD:-handdetect-local}"

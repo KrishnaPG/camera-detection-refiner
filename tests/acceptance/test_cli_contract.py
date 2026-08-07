@@ -75,3 +75,31 @@ def test_make_clean_removes_isolated_runtime_state(tmp_path: Path) -> None:
     assert not runs_root.exists()
     assert not (tmp_runtime_root / "dvclive").exists()
     assert not (tmp_runtime_root / "workbench").exists()
+
+
+def test_config_runtime_roots_follow_tmp_root_env(monkeypatch, tmp_path: Path) -> None:
+    from handdetect.cli.main import _parse_config_with_runtime_env
+
+    runtime_root = tmp_path / "runtime"
+    monkeypatch.setenv("HANDDETECT_TMP_ROOT", str(runtime_root))
+
+    parsed = _parse_config_with_runtime_env(ROOT / "configs" / "smoke-experiment.toml")
+
+    assert parsed.runtime.runs_root == runtime_root / "runs"
+    assert parsed.runtime.mlflow_tracking_uri == str(runtime_root / "mlruns")
+    assert parsed.runtime.dvclive_root == runtime_root / "dvclive"
+    assert parsed.runtime.evidently_root == runtime_root / "evidently"
+
+
+def test_config_specific_runtime_roots_override_tmp_root_env(monkeypatch, tmp_path: Path) -> None:
+    from handdetect.cli.main import _parse_config_with_runtime_env
+
+    runtime_root = tmp_path / "runtime"
+    explicit_runs_root = tmp_path / "explicit-runs"
+    monkeypatch.setenv("HANDDETECT_TMP_ROOT", str(runtime_root))
+    monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(explicit_runs_root))
+
+    parsed = _parse_config_with_runtime_env(ROOT / "configs" / "smoke-experiment.toml")
+
+    assert parsed.runtime.runs_root == explicit_runs_root
+    assert parsed.runtime.dvclive_root == runtime_root / "dvclive"

@@ -10,7 +10,7 @@ make run CONFIG=configs/smoke-experiment.toml
 python -m handdetect.cli.main review open --suite-id <suite_id> --run-id <run_id>
 ```
 
-No hardcoded application credentials are required in the default local setup.
+Local Label Studio credentials are documented in `ReadMe.md`.
 
 Default local runtime state, including run artifacts and third-party tracking files, is under `/tmp/handdetect`.
 Runtime retention runs automatically with `HANDDETECT_KEEP_SUITES`, `HANDDETECT_MAX_RUNTIME_BYTES`, and `HANDDETECT_MIN_FREE_BYTES`.

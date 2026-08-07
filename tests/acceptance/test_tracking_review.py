@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import types
 from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 from dq_contracts.ids import RunId, RunSuiteId
 from handdetect.review.fiftyone_dataset import FiftyOneDatasetPublisher
 from handdetect.review.labelstudio_client import (
@@ -23,6 +26,15 @@ from handdetect.tracking_platforms.interfaces import TrackingMetric, TrackingRun
 from handdetect_domain.config import RuntimeConfig
 
 ROOT = Path(__file__).resolve().parents[2]
+TRACKING_REVIEW_TMP_ROOT = Path(tempfile.gettempdir()) / f"handdetect-pytest-{os.getpid()}"
+
+
+@pytest.fixture(autouse=True)
+def tracking_review_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HANDDETECT_TMP_ROOT", str(TRACKING_REVIEW_TMP_ROOT))
+    monkeypatch.setenv("HANDDETECT_KEEP_SUITES", "100")
+    monkeypatch.setenv("HANDDETECT_MIN_FREE_BYTES", "0")
+    monkeypatch.setenv("HANDDETECT_MAX_RUNTIME_BYTES", "999999999999")
 
 
 def _run_smoke() -> tuple[str, str]:
@@ -32,6 +44,7 @@ def _run_smoke() -> tuple[str, str]:
         text=True,
         capture_output=True,
         check=False,
+        env=os.environ.copy(),
     )
     assert result.returncode == 0, result.stderr
     suite_id = result.stdout.split("suite_id=", 1)[1].split()[0]
