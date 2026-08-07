@@ -98,7 +98,9 @@ version = "0.1.0"
 description = "ByteTrack-backed hand detection quality workbench"
 requires-python = "==3.12.*"
 dependencies = [
+  "fastapi==0.141.1",
   "fiftyone==1.20.1",
+  "jinja2==3.1.6",
   "label-studio-sdk==2.1.0",
   "mlflow==3.15.1",
   "numpy==2.5.1",
@@ -108,10 +110,14 @@ dependencies = [
   "prometheus-client==0.26.0",
   "pyarrow==25.0.0",
   "pydantic==2.13.4",
+  "pyyaml==6.0.3",
+  "python-multipart==0.0.32",
   "structlog==26.1.0",
   "supervision==0.30.0",
+  "tomlkit==0.15.1",
   "trackers==2.6.0",
   "typer==0.27.1",
+  "uvicorn==0.52.1",
   "dvc==3.67.1",
   "dvclive==3.49.1",
   "evidently==0.7.21",

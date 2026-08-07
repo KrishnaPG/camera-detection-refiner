@@ -6,7 +6,7 @@
 
 **Architecture:** The adapter is a library-first pipeline with typed boundary parsers, Arrow/NumPy hot-path buffers, a ByteTrack association adapter, pluggable false-positive filters, immutable run storage, MLflow/DVC/Evidently experiment tracking, and static review outputs. The CLI is the first public entrypoint; batch/API/streaming/edge wrappers must reuse the same `AdapterPipeline.run_clip()` core contract.
 
-**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.5.1`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `opencv-python-headless==5.0.0.93`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==1.20.1`, `label-studio-sdk==2.1.0`.
+**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.5.1`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `opencv-python-headless==5.0.0.93`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==1.20.1`, `label-studio-sdk==2.1.0`, `fastapi==0.141.1`, `uvicorn==0.52.1`, `jinja2==3.1.6`, `pyyaml==6.0.3`, `tomlkit==0.15.1`, `python-multipart==0.0.32`.
 
 ## Global Constraints
 
@@ -18,10 +18,15 @@
 - Every experiment must be identified by `ExperimentId`; every input clip must retain `ClipId` provenance from `meta.json`.
 - MLflow tracking is mandatory for experiment parameters, scalar metrics, tags, and artifacts. The default tracking URI is local `mlruns/`; a typed config value may point to a remote MLflow server later.
 - DVC/DVCLive outputs are mandatory for git-friendly metrics and plots under `dvclive/<run_suite_id>/<run_id>/` so regression charts can be compared without reading custom report HTML.
+- DVC is the authority for restoring exact data, labels, configs, and experiment workspaces. MLflow, FiftyOne, Label Studio, Evidently, and static HTML must store links back to the DVC/Git-backed lineage bundle rather than becoming competing lineage stores.
 - Evidently reports are mandatory for evaluation/regression dashboards where label or metric tables exist; static HTML must link to Evidently artifacts instead of reimplementing those charts.
 - FiftyOne is mandatory as the visual comparison workbench: each run must create a real FiftyOne dataset with raw detections, cleaned detections, rejected detections, track ids, stage reasons, and hard-case sample tags.
 - Label Studio is mandatory as the human correction loop: each run must produce importable pre-annotated tasks, and when a configured Label Studio endpoint is available, the review command must create a per-run project, import predictions through `label-studio-sdk==2.1.0`, and reuse the recorded project on repeated opens of the same immutable run.
 - The static HTML report is only a hub. It must link to MLflow, DVC, Evidently, FiftyOne, Label Studio, and local artifact paths; it must not duplicate platform features already provided by those tools.
+- Every run must write `lineage/replay.lock.json`, containing content-addressed references for git commit, dependency lock hash, dataset DVC hash, label-set DVC hash, canonical config hash, MLflow run id, DVC experiment ref when available, parent lineage id, and baseline run id.
+- Human labels must be frozen into immutable `labels/versions/<label_set_id>/` directories before accuracy claims. A label-set id is the SHA-256 of the canonical exported annotations, Label Studio project id, label config hash, task ids, and source frame ids.
+- Replay must never mutate the caller's current workspace. `handdetect lineage replay` must create an isolated git worktree under `.handdetect/replays/<replay_id>/worktree`, restore DVC artifacts there, apply typed parameter overrides, run a new experiment that consumes restored worktree inputs but writes child artifacts to the main `runs/`, `mlruns/`, and `dvclive/` roots, compare against the parent run, and publish a new review journey.
+- A local workbench must provide one-button replay from a prior run. The workbench may orchestrate DVC/Git/MLflow/Label Studio commands, but it must not duplicate their run comparison, artifact browsing, annotation, or charting features.
 - Core logic must not read environment variables, current time, filesystem, network, or random state directly. Public entrypoints create providers and ready handles.
 - Pydantic `model_validate` may appear only in boundary parsers for JSON/config/manifest/label imports.
 - Internal hot-path transfer is typed object -> NumPy view or Arrow table. Do not serialize to dict/JSON between internal modules.
@@ -45,6 +50,8 @@
   - `runs/<run_suite_id>/<run_id>/tables/*.parquet` stores metrics, detections, tracks, and decisions for fast comparison across runs and experiments.
   - `runs/index/run_index.parquet` and `runs/index/metric_history.parquet` append one row per run and per metric so regressions can be queried by `RunSuiteId`, `RunId`, `ExperimentId`, config hash, git commit, dataset hash, label-set id, metric name, and metric value.
   - `handdetect review open --suite-id <id> --run-id <id>` opens or prints stable local URLs for MLflow comparison, FiftyOne visual review, Label Studio correction, Evidently regression report, DVC plots, and the static report hub.
+  - `handdetect lineage replay --from-run <suite_id>/<run_id> --set adapter.max_center_speed_px_per_s=3900.0` restores the exact parent data/labels/config/code in an isolated worktree, applies the override, runs a child experiment, gates regression against the parent, and opens the new review journey.
+  - `handdetect workbench serve` opens a local FastAPI workbench where each run page has a replay button, typed parameter overrides, lineage proof, regression status, and links into MLflow/DVC/Evidently/FiftyOne/Label Studio.
 - Non-goals:
   - Do not retrain WiLoR, YOLO, or any detector.
   - Do not implement false-negative interpolation.
@@ -73,6 +80,10 @@
 - Current run metrics + baseline manifest + run history index -> `handdetect.regression.gates.RegressionGateRunner` -> compares configured thresholds and records pass/fail -> output `regression.json`, `metric_history.parquet`, Evidently regression report, and CLI exit code -> revalidates persisted current/baseline manifests -> no network unless MLflow tracking URI is remote -> no async -> Polars scans over Parquet, no JSON path -> error path emits `HDQ_REGRESSION_FAILED`.
 - `RunManifest` + cleaned/audit/overlay artifacts -> `handdetect.review.fiftyone_dataset.FiftyOneDatasetPublisher` -> creates or updates a real local FiftyOne dataset named `handdetect_<run_suite_id>_<run_id>` with fields `raw`, `cleaned`, `rejected`, `track_id`, `stage_reason`, and `hard_case_tags` -> output dataset name and optional app URL -> FiftyOne API call through review boundary only -> no adapter hot-path work -> error path emits `HDQ_FIFTYONE_EXPORT_FAILED`.
 - `RunManifest` + sampled frames + predictions -> `handdetect.review.labelstudio_client.LabelStudioPublisher` -> writes Label Studio JSON tasks with `predictions` and, if endpoint/token are configured, creates a per-run Label Studio project and imports those tasks through the SDK; repeated opens reuse `review/labelstudio-import.json` instead of duplicating tasks -> output project id/url or importable JSON path -> external API call only in review bridge -> no adapter hot-path work -> error path emits `HDQ_LABEL_STUDIO_EXPORT_FAILED`.
+- Label Studio project + reviewed annotations -> `handdetect.labels.freeze.LabelSetFreezer` -> exports annotations, canonicalizes task/annotation order, computes `LabelSetId`, writes `labels/versions/<label_set_id>/`, runs `dvc add`, and appends `labels/index.parquet` -> output immutable label version usable by future runs -> SDK/API call only in label boundary -> no adapter hot-path work -> error path emits `HDQ_LABEL_FREEZE_FAILED`.
+- Completed run manifest + platform ids + DVC/Git refs -> `handdetect.lineage.capture.LineageSnapshotWriter` -> writes `lineage/replay.lock.json` and logs it to MLflow/DVC artifacts -> output `LineageId` and replay lock -> validates every referenced file hash exists before write -> no concurrency -> JSON only at lineage artifact boundary -> error path emits `HDQ_LINEAGE_CAPTURE_FAILED`.
+- Prior `lineage/replay.lock.json` + typed overrides -> `handdetect.lineage.replay.LineageReplayService` -> creates isolated git worktree, restores DVC-tracked data/labels/config, writes child config, runs experiment, compares regression against parent run, exports tracking/review artifacts -> output child run suite, child run id, child lineage id, and comparison URL/path -> subprocess boundaries only for Git/DVC/public CLI -> error path emits `HDQ_LINEAGE_REPLAY_FAILED`.
+- Browser click in local workbench -> `handdetect.workbench.server` -> calls `LineageReplayService` and streams job status from `runs/<child_suite>/<child_run>/lineage/replay-status.jsonl` -> output replay result page with links to the platform-owned UIs -> FastAPI owns orchestration only -> no custom metrics/annotation/charting UI -> error path emits `HDQ_WORKBENCH_REPLAY_FAILED`.
 
 ## 3. Structure Derived From Flow
 
@@ -85,12 +96,14 @@
   - Tracker adapter: `handdetect.tracking.interfaces` isolates third-party MOT libraries behind typed native input/output shapes.
   - Metrics registry: `handdetect.metrics.registry` centralizes metric names, counters, histograms, and report query ids.
   - Experiment tracker adapters: `handdetect.tracking_platforms` isolates MLflow, DVC/DVCLive, and Evidently from domain logic.
+  - Lineage snapshot: `handdetect.lineage` binds DVC/Git/config/label/platform references into one replay lock without becoming a second artifact store.
   - State-machine runner: `handdetect.pipeline.state_machine` owns job and clip phase transitions.
 - Second reusable pattern round:
   - Experiment engine: `handdetect.experiments.runner` composes config, run store, pipeline, metrics, and regression gates into repeatable experiment suites.
   - Review artifact builder: `handdetect.report` composes persisted tables and sample manifests into HTML/visual outputs.
   - Label/evaluation workbench: `handdetect.eval` composes label imports, IoU matching, stage metrics, and calibration sweeps.
   - Review journey bridge: `handdetect.review_journey` composes MLflow, DVC, Evidently, FiftyOne, Label Studio, and static report links into one operator-facing command.
+  - Replay workbench: `handdetect.workbench` exposes one-button local orchestration over lineage replay and platform links only.
 - Final module list:
   - `handdetect.config`: typed runtime and experiment configuration.
   - `handdetect.domain`: Pydantic domain models, branded ids, enums, constants.
@@ -107,6 +120,8 @@
   - `handdetect.eval`: labels, IoU matching, accuracy metrics, calibration sweeps.
   - `handdetect.report`: static HTML, sampled overlays, FiftyOne export.
   - `handdetect.review_journey`: public review launcher and platform URL/status manifest.
+  - `handdetect.lineage`: label freezing, lineage capture, isolated restore, and replay orchestration.
+  - `handdetect.workbench`: local FastAPI orchestration UI for run selection and replay.
   - `handdetect.regression`: baseline comparison and pass/fail gates.
   - `handdetect.cli`: public Typer commands only.
 - Module ownership rules:
@@ -139,6 +154,7 @@
   - `RunCatalog.open(runs_root)` returns a ready handle for append-only `run_index.parquet` and `metric_history.parquet`; it must acquire a file lock before appending and release it in the same context manager.
   - `ExperimentTrackingSession.open(config)` returns ready MLflow, DVC, and Evidently handles; remote tracking failures are logged and surfaced in `tracking_export_status.json` but must not mutate completed core artifacts.
   - `ReviewPlatformSession.open(config)` returns ready MLflow UI, FiftyOne App, and optional Label Studio handles; every launched process has an owning context manager and a status file with pid, URL, and cleanup instructions.
+  - `LineageReplaySession.open(snapshot, overrides, paths)` owns the isolated git worktree, DVC pull/apply commands, child process, status log, and cleanup policy.
   - `DatasetScanner.scan(data_root)` returns `ValidatedClipPathSet` values only after required data path checks pass.
   - `TelemetryHandle.open(config)` returns a ready handle whose exporter failures are non-blocking.
   - Factories use `contextlib.ExitStack` so temp directories and file handles are cleaned by the owner that acquired them.
@@ -169,6 +185,15 @@
   - Rejected custom SQL dashboard; rejected because MLflow/DVC/Evidently already provide mature run tracking, metric comparison, plots, and reports.
   - Hot stage: none. Tracking export runs after aggregation, logs scalar metrics and artifact references, and must not run inside per-frame loops.
   - Copy/serde removed: MLflow and DVCLive receive scalar metrics from `EvaluationSummary`; Evidently reads Arrow/Parquet-derived Pandas/Polars frames only in reporting, not adapter processing.
+- Lineage restore:
+  - Selected authority: DVC experiments and DVC-tracked data/label/config artifacts.
+  - Rejected MLflow-only restore; rejected because MLflow is excellent for comparison but does not own exact workspace/data checkout.
+  - Rejected manual Git checkout instructions; rejected because replay must be a one-command or one-button operator action.
+  - Hot stage: none. Restore/replay happens before a child experiment starts and uses an isolated worktree.
+- Local replay workbench:
+  - Selected packages: `fastapi==0.141.1`, `uvicorn==0.52.1`, `jinja2==3.1.6`.
+  - Rejected custom React workbench; rejected because first delivery needs only forms/buttons around platform-owned UIs.
+  - Hot stage: none. The workbench streams status files and invokes public CLI services; it never processes frames.
 - Open-source review platforms:
   - Selected packages/platforms: FiftyOne App for visual side-by-side sample inspection, Label Studio plus `label-studio-sdk==2.1.0` for correction/label approval, MLflow UI for experiment comparison, DVC plots for git-friendly metric history, Evidently HTML for regression/evaluation reports.
   - Rejected custom comparison UI; rejected because these tools already own run comparison, visual CV review, pre-annotation correction, and metrics plots.
@@ -199,6 +224,7 @@
   - Annotation and detection containers use Supervision.
   - Metrics tables use Arrow/Polars.
   - Experiment tracking uses MLflow, DVC/DVCLive, and Evidently instead of a custom dashboard/database.
+  - Exact replay uses DVC/Git worktrees instead of a custom lineage database.
 - Reduced copy/serde:
   - JSON parse occurs once at input boundary.
   - Filter/tracker stages exchange NumPy/Arrow blocks.
@@ -228,3 +254,4 @@
 - [06-reporting-review-workbench.md](./06-reporting-review-workbench.md): HTML report, visual overlays/contact sheets, FiftyOne/Label Studio exports, architecture docs.
 - [07-open-source-experiment-tracking.md](./07-open-source-experiment-tracking.md): MLflow, DVC/DVCLive, Evidently, append-only run catalog, cross-run regression query path.
 - [08-seamless-review-journey.md](./08-seamless-review-journey.md): one-command review journey across MLflow, DVC, Evidently, FiftyOne, Label Studio, and the static report hub.
+- [09-lineage-restore-replay-workbench.md](./09-lineage-restore-replay-workbench.md): DVC/Git-backed lineage bundles, immutable label versions, isolated restore/replay, and one-button local replay UX.
