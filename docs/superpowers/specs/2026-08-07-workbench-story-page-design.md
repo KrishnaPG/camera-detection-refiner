@@ -3,20 +3,22 @@
 Date: 2026-08-07
 Status: Design blocker for Phase 1
 
+Visual contract: [workbench-story-page-mock.png](./assets/workbench-story-page-mock.png)
+
 ## Saved Work Items
 
 Phase 1 goal:
-Build the visual review journey that makes a run demonstrable from the Workbench: story page, full-clip visual outputs, Rerun export, richer FiftyOne export, MLflow deep links, and edge-case tags.
+Build the visual review journey that makes a run demonstrable inside the BioDock Berg10 UI: HandDetect as a Generator Package, story page panels, full-clip visual outputs, Rerun export, richer FiftyOne export, MLflow deep links, and edge-case tags.
 
 Current blocker:
-Finalize the Workbench story page feature set, information architecture, and mock UI design before implementation starts.
+Finalize the BioDock Generator Package story page feature set, information architecture, and mock UI design before implementation starts.
 
 Phase 2 goal:
 Integrate CVAT for video correction, Datumaro for dataset export/diff/interchange, and Evidently workspace UI for evaluation history.
 
 ## Product Intent
 
-The story page must let an evaluator or customer understand the adapter without reading tables or CLI output. The page must answer five questions visually:
+The story page must let an evaluator or customer understand the adapter without reading tables or CLI output. The page must run inside BioDock Berg10 as the visual workspace for the HandDetect Generator Package, not as an unrelated standalone dashboard. The page must answer five questions visually:
 
 1. What was the full input clip?
 2. What did the detector report on each frame?
@@ -25,6 +27,54 @@ The story page must let an evaluator or customer understand the adapter without 
 5. Which hand-detection spec edge cases are visible, handled, candidate-only, or unsupported?
 
 The default experience should feel closer to a professional video editor or VFX review bay than to a metrics dashboard. Metrics are still present, but the primary object is time: a clip, a playhead, tracks, frame evidence, and decision events.
+
+The checked-in mock image is the visual quality bar. Implementation should match or improve its density, dark editor-grade palette, panel composition, synchronized viewer emphasis, bottom timeline, and customer-demo clarity.
+
+## BioDock Generator Package Direction
+
+The adapter should be modeled as a BioDock Generator Package named `handdetect-quality-adapter`. The existing local `external/biodock` symlink is useful for development discovery, but the Phase 1 implementation target is package compatibility with BioDock Berg10 rather than a separate Workbench frontend.
+
+Generator package identity:
+
+- `package_id`: `handdetect_quality_adapter`
+- `workspace_id`: `handdetect_quality_story`
+- Default layout id: `handdetect_customer_demo_console`
+- Package action: `handdetect.run_smoke_experiment`
+- Primary output: a run-scoped visual review journey.
+
+Required package artifacts:
+
+- `generator-package/generator-package-manifest.json`
+- `generator-package/ui/workspace.json`
+- `generator-package/schemas/handdetect-run-event.schema.json`
+- `generator-package/views/handdetect_story_views.sql`
+- `generator-package/ui/themes/handdetect-story.overrides.css`
+- `generator-package/ui/layouts/` only for explicit legacy/custom model fallbacks. Preferred layouts should use `extends`.
+
+The package must project HandDetect run artifacts into Berg10-visible rows and artifacts. BioDock system panels should then handle package history, run status, artifacts, diagnostics, access/evidence problems, and generic review surfaces. HandDetect owns only the domain-specific visual panels.
+
+## Dependency Shape
+
+Current local state:
+
+- `external/biodock` is an ignored symlink to `/home/ubuntu/workspace/biodock`.
+- There is no `.gitmodules` entry for BioDock in this repository.
+- The symlink target is a separate working tree and can drift silently.
+
+Decision for Phase 1 design:
+
+- Keep the symlink for exploratory development only.
+- Do not convert to a submodule until the BioDock-side Generator Package API changes required for HandDetect are identified and either upstreamed or intentionally pinned.
+- Before implementation is considered complete, replace the ignored symlink with one of:
+  - a Git submodule pinned to the BioDock commit containing the required base layout and panel host capabilities, or
+  - a published/private package dependency on the specific BioDock frontend packages.
+
+Recommendation:
+
+- If HandDetect must ship as one reproducible repo for the assignment, use a submodule after the BioDock base-layout patch is stable.
+- If the long-term goal is production reuse across projects, prefer published BioDock packages and keep `external/biodock` as a local development convenience only.
+
+The design must not depend on an untracked symlink for repeatability.
 
 ## Non-Negotiable Requirements
 
@@ -69,7 +119,7 @@ Required Phase 1 artifacts:
 - `review/clips/<clip_id>/thumbnail_strip.webp`
   - Fixed-step visual strip for the minimap and timeline zoom context.
 
-Frame-level data must be compact. The browser must not load raw Parquet or full audit JSONL for normal playback. Debug panels may link to source tables through Workbench artifact routes.
+Frame-level data must be compact. The browser must not load raw Parquet or full audit JSONL for normal playback. Debug panels may link to source tables through Berg10 artifact routes.
 
 ## Edge-Case Taxonomy
 
@@ -101,7 +151,7 @@ Required tags:
 
 The UI must never present heuristic or unsupported tags as proven correctness.
 
-## Reusable Frontend Packages
+## BioDock Package And Panel Reuse
 
 The story page should reuse or mirror the following package patterns from `external/biodock/frontend/packages/`:
 
@@ -128,11 +178,24 @@ New hand-detection-specific frontend packages may be added only when these gener
 - `vision-review-contracts`
   - Strongly typed story manifest, clip timeline, event, track, chapter, layer, and support-state contracts.
 - `vision-review-workspace`
-  - Workbench story shell and FlexLayout presets.
+  - Berg10-compatible story shell helpers and FlexLayout preset contracts.
 - `vision-video-reviewer`
   - Synchronized video/canvas playback, layer control, and frame stepping.
 - `vision-timeline-reviewer`
   - Zoomable timeline, track lanes, markers, minimap, brushing, and playhead synchronization.
+
+BioDock Generator Workspace package integration should use:
+
+- `generator-workspace-runtime`
+  - Ingests the HandDetect workspace descriptor and exposes panel bindings/evidence.
+- `generator-workspace-host-adapters`
+  - Projects HandDetect package panels into FlexLayout with badges and bottom surfaces.
+- `generator-workspace-host-adapters/layoutCompiler`
+  - Compiles package slot overrides plus a Berg10-owned base layout into FlexLayout JSON.
+- `generator-workspace-runtime/packageBundle`
+  - Validates package artifacts, raw admissions, views, and `ui/workspace.json` references.
+- `scientific-workspace`
+  - Hosts the resulting panels with panel registry, persistence, toolbar/status patterns, and error boundaries.
 
 ## Panel Inventory
 
@@ -368,9 +431,110 @@ Human correction workflow. Phase 1 can show Label Studio handoff; Phase 2 adds C
 Purpose:
 Experiment comparison, replay review, and regression discussion. This layout is secondary because it should not replace visual proof.
 
+## Required New Berg10 Base Layout
+
+The current Berg10 base layouts can host HandDetect panels, but none gives the exact mock geometry: full-width story header, three-column editor center, and full-width timeline at the bottom. Phase 1 should therefore add a new BioDock base layout rather than compromising the UI.
+
+New base layout id:
+
+- `berg10.generator.videoReview`
+
+Required roles:
+
+- `status`
+- `review`
+- `primary`
+- `inspector`
+- `history`
+- `artifacts`
+- `diagnostics`
+
+Role mapping:
+
+- `status`: HandDetect story header and run outcome strip.
+- `review`: clip navigator, chapters, and rejection taxonomy tabs.
+- `primary`: synchronized raw-vs-adapter viewer.
+- `inspector`: decision inspector and selected event details.
+- `history`: full-width zoomable video timeline.
+- `artifacts`: platform bridge, exported videos, Rerun/FiftyOne/MLflow links.
+- `diagnostics`: browser proof, missing artifacts, sync drift, export health.
+
+Topology:
+
+```
++------------------------------------------------------------------------------------------------+
+| slot.status                                                                                   |
++------------------------+--------------------------------------------------+--------------------+
+| slot.review            | slot.primary                                     | slot.inspector     |
++------------------------+--------------------------------------------------+--------------------+
+| slot.history                                                                                  |
++------------------------------------------------------------------------------------------------+
+| bottom surfaces: events, logs, waiting actions, access, evidence problems                      |
++------------------------------------------------------------------------------------------------+
+```
+
+Approximate weights:
+
+- Root orientation: `column`
+- `slot.status`: 10
+- Center row: 66
+  - `slot.review`: 20
+  - `slot.primary`: 56
+  - `slot.inspector`: 24
+- `slot.history`: 24
+
+The new layout should use existing Generator roles. Do not add `timeline`, `navigator`, or `viewer` roles unless implementation proves existing roles cannot support package panels or data-source compatibility. The package panel ids and titles can carry the domain semantics.
+
+Expected BioDock changes:
+
+- Add `"berg10.generator.videoReview"` to `GENERATOR_BASE_LAYOUT_IDS`.
+- Add its required roles to `GENERATOR_BASE_LAYOUT_REQUIRED_ROLES`.
+- Add its topology to `GENERATOR_BASE_LAYOUT_TOPOLOGY`.
+- Add a `generatedGeneratorBaseLayoutPresets()` entry with label `Video Review` and category `review`.
+- Add tests proving the new layout compiles and keeps `slot.history` full width.
+
+HandDetect package `ui/workspace.json` should set:
+
+```json
+{
+  "workspaceId": "handdetect_quality_story",
+  "defaultLayoutId": "handdetect_customer_demo_console",
+  "selectorGroupLabel": "HandDetect",
+  "theme": {
+    "extends": "base",
+    "overrideCssPath": "ui/themes/handdetect-story.overrides.css"
+  },
+  "layouts": [
+    {
+      "layoutId": "handdetect_customer_demo_console",
+      "label": "Customer Demo Console",
+      "category": "review",
+      "extends": "berg10.generator.videoReview",
+      "slots": {
+        "slot.status": ["handdetect_story_header"],
+        "slot.review": ["handdetect_clip_navigator", "handdetect_rejection_taxonomy"],
+        "slot.primary": ["handdetect_synchronized_viewer"],
+        "slot.inspector": ["handdetect_decision_inspector", "handdetect_track_explorer"],
+        "slot.history": ["handdetect_timeline"],
+        "slot.artifacts": ["handdetect_platform_bridge"],
+        "slot.diagnostics": ["handdetect_diagnostics"]
+      }
+    }
+  ]
+}
+```
+
+Additional presets may use existing layouts:
+
+- Forensic Review Bay: `berg10.generator.debug`
+- Annotation Handoff: `berg10.generator.review`
+- Metrics And Regression: `berg10.generator.analysis`
+
+The default must remain `berg10.generator.videoReview` because it is the only geometry that matches the mock.
+
 ## FlexLayout Model Strategy
 
-Use a slot-topology model instead of hand-authored nested JSON in application code.
+Use BioDock Generator Package `extends` and slot overrides instead of hand-authored nested JSON in HandDetect application code. The host compiles the package workspace into FlexLayout through BioDock's `layoutCompiler`.
 
 Slot ids:
 - `slot.story.header`
@@ -383,6 +547,8 @@ Slot ids:
 - `slot.track.explorer`
 - `slot.metrics`
 - `slot.platforms`
+
+For BioDock compatibility, HandDetect-specific slot ids above are conceptual names only. The actual Generator Package workspace must use Berg10 slot ids from `GENERATOR_SLOT_IDS`, especially `slot.status`, `slot.review`, `slot.primary`, `slot.inspector`, `slot.history`, `slot.artifacts`, and `slot.diagnostics`.
 
 Panel component ids:
 - `StoryHeaderPanel`
@@ -460,7 +626,7 @@ Controls:
 ## User Journey
 
 1. User runs a smoke experiment.
-2. Workbench run detail shows a primary button: `Open Story Review`.
+2. BioDock/Berg10 run detail shows a primary button: `Open Story Review`.
 3. Story page opens in Customer Demo Console layout.
 4. The page selects the strongest example chapter automatically.
 5. User presses play and sees raw detector boxes over-firing while adapter output remains stable.
@@ -513,8 +679,8 @@ Implementation requirements:
 
 Browser proof must validate:
 
-- `docker compose up -d` starts the Workbench stack.
-- A user can run smoke from the Workbench button.
+- `docker compose up -d` starts the BioDock-backed local stack.
+- A user can run smoke from the BioDock/Berg10 button.
 - Run detail exposes `Open Story Review`.
 - Story page loads through `http://10.7.0.4:60050`.
 - The selected clip video is visible and playable.
