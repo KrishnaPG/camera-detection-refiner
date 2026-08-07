@@ -11,7 +11,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from dq_contracts.ids import RunId, RunSuiteId
 from handdetect.review.fiftyone_dataset import FiftyOneDatasetPublisher
-from handdetect.review.labelstudio_client import LabelStudioPublisher
+from handdetect.review.labelstudio_client import (
+    LABEL_STUDIO_PROJECT_TITLE_MAX_LENGTH,
+    LabelStudioPublisher,
+    label_studio_project_title,
+)
 from handdetect.review_journey.launcher import ReviewJourneyLauncher
 from handdetect.runtime_paths import runs_root
 from handdetect.tracking_platforms.evidently_report import EvidentlyReportWriter
@@ -372,6 +376,16 @@ def test_label_studio_publish_reuses_existing_import_manifest(monkeypatch, tmp_p
 
     assert project_id == 17
     assert imported == 3
+
+
+def test_label_studio_project_title_fits_service_limit(tmp_path) -> None:
+    run_root = tmp_path / "runs" / "suite-20260807T073728898577Z" / "smoke-339952987db72eb3"
+
+    title = label_studio_project_title(run_root)
+
+    assert len(title) <= LABEL_STUDIO_PROJECT_TITLE_MAX_LENGTH
+    assert title.startswith("handdetect-")
+    assert title.endswith("smoke-339952987db72eb3")
 
 
 def _fake_fiftyone_module() -> types.ModuleType:
