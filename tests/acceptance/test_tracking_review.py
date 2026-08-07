@@ -413,8 +413,8 @@ def _fake_evidently_module(*, raise_on_run: bool = False) -> types.ModuleType:
         pass
 
     class FakeSnapshot:
-        def save_html(self, path: Path) -> None:
-            path.write_text("evidently-html", encoding="utf-8")
+        def save_html(self, path: str | Path) -> None:
+            Path(path).write_text("evidently-html", encoding="utf-8")
 
     class FakeReport:
         def __init__(self, metrics: list[object]) -> None:
