@@ -6,6 +6,23 @@ Before creating a new package, check existing BioDock packages and selected matu
 open-source platforms first. If a capability is already close enough, extend that owner
 instead of creating a parallel HandDetect implementation.
 
+## Product Ownership Boundary
+
+HandDetect is a standalone detector-quality adapter. It must run through CLI or automation
+without Berg10, BioDock services, or a browser. BioDock is an optional UI/runtime host used
+through the Generator SDK and package descriptors.
+
+- HandDetect owns core processing, ByteTrack invocation, false-positive decisions, run
+  artifacts, platform exports, local fallback review artifacts, and CLI/workbench fallback
+  orchestration.
+- BioDock owns Berg10, the Generator SDK, reusable package-authoring helpers, reusable base
+  layouts, generic panels, FlexLayout compilation, C-view projection, diagnostics, frontend
+  chrome, and viewer lifecycle.
+- Berg10 must not depend on HandDetect. HandDetect is one generator package among many.
+- Reusable SDK or UI-host code belongs in `external/biodock`; this repo may keep only
+  HandDetect-specific generator package metadata, SQL views, theme overrides, action identity,
+  and fallback story artifacts.
+
 ## Existing Owners To Reuse
 
 - BioDock `generator-workspace-runtime`: generator descriptors, actions, selectors, evidence.
@@ -39,9 +56,6 @@ Reusable packages:
 - `evaluation-regression`: metrics, regression history, and gates.
 - `visual-reporting`: report artifacts and sampled overlays.
 - `platform-review`: FiftyOne and Label Studio bridges.
-- `vision-review-contracts`: compact story/timeline/event/track/chapter schemas.
-- `vision-review-artifacts`: compact story artifact projection, overlay videos, thumbnail strips, and Rerun manifests.
-- `biodock-generator-package`: HandDetect Generator Package descriptor/view/theme/action publication.
 - `review-journey`: review surface launcher and platform manifest.
 - `lineage-replay`: replay lock capture and isolated re-runs.
 - `replay-workbench`: local FastAPI workbench UI.
@@ -52,7 +66,9 @@ Domain packages:
 - `handdetect-policies`: hand-specific thresholds and selection policy.
 - `apps/handdetect-cli`: Typer commands and app wiring only.
 
-Do not create `biodock-vision-review-workspace`; BioDock already owns the reusable workspace
-runtime, FlexLayout host integration, diagnostics, hot refs, streams, C-view projection, and
-visual contracts. HandDetect may publish package descriptors and domain panels, but it must not
-duplicate BioDock runtime or layout infrastructure.
+Do not create `vision-review-contracts`, `vision-review-artifacts`,
+`biodock-generator-package`, or `biodock-vision-review-workspace` in this repository during
+Phase 1. BioDock already owns the reusable workspace runtime, FlexLayout host integration,
+diagnostics, hot refs, streams, C-view projection, SDK authoring surface, and visual contracts.
+HandDetect may publish app-specific package descriptors and domain panels, but it must not
+duplicate BioDock runtime, SDK, or layout infrastructure.

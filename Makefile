@@ -24,7 +24,10 @@ typecheck:
 		packages/dq-resources/src \
 		packages/experiment-tracking/src/experiment_tracking/interfaces.py \
 		packages/experiment-tracking/src/experiment_tracking/export_status.py \
-		apps/handdetect-cli/src/handdetect/lineage/models.py
+		apps/handdetect-cli/src/handdetect/lineage/models.py \
+		apps/handdetect-cli/src/handdetect/review_journey/launcher.py \
+		apps/handdetect-cli/src/handdetect/review/story_artifacts.py \
+		apps/handdetect-cli/src/handdetect/workbench/server.py
 
 test:
 	$(PYTHON) -m pytest tests/acceptance -v

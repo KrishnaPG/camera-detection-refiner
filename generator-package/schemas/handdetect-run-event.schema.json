@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "handdetect-run-event.schema.json",
+  "title": "HandDetect Run Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "run_suite_id",
+    "run_id",
+    "source_kind",
+    "package_id",
+    "created_at"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["run_started", "clip_processed", "artifact_ready", "run_completed", "run_failed"]
+    },
+    "run_suite_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "clip_id": {
+      "type": ["string", "null"]
+    },
+    "source_kind": {
+      "const": "handdetect_quality_run"
+    },
+    "package_id": {
+      "const": "handdetect_quality_adapter"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": ["string", "null"]
+    },
+    "artifact_path": {
+      "type": ["string", "null"]
+    },
+    "message": {
+      "type": ["string", "null"]
+    }
+  }
+}

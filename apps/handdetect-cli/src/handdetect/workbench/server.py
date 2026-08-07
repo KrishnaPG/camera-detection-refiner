@@ -120,8 +120,38 @@ def create_app() -> FastAPI:
                 "regression": regression,
                 "tracking": tracking,
                 "platforms": platforms,
+                "story": story_summary(run_root),
             },
         )
+
+    @app.get("/runs/{suite_id}/{run_id}/story", response_class=HTMLResponse)
+    def story_review(request: Request, suite_id: str, run_id: str) -> HTMLResponse:
+        run_root = runs_root() / suite_id / run_id
+        story = read_required_run_json(run_root, "review/story.json", suite_id, run_id)
+        return templates.TemplateResponse(
+            request,
+            "story.html",
+            {
+                "request": request,
+                "suite_id": suite_id,
+                "run_id": run_id,
+                "story": story,
+            },
+        )
+
+    @app.get("/runs/{suite_id}/{run_id}/source-video/{clip_id}/{eye}")
+    def source_video(suite_id: str, run_id: str, clip_id: str, eye: str) -> FileResponse:
+        run_root = runs_root() / suite_id / run_id
+        manifest = read_required_run_json(run_root, "run-manifest.json", suite_id, run_id)
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("data_root"), str):
+            raise HTTPException(status_code=404, detail=f"Run not found for {suite_id}/{run_id}")
+        target = source_video_path(Path(manifest["data_root"]), clip_id, eye)
+        if not target.exists() or not target.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Source video not found for {suite_id}/{run_id}: {clip_id}/{eye}",
+            )
+        return FileResponse(target, media_type="video/mp4")
 
     @app.post("/runs/{suite_id}/{run_id}/replay")
     def replay_run(suite_id: str, run_id: str, override: str = Form(...)) -> RedirectResponse:
@@ -179,6 +209,32 @@ def open_review_platforms(suite_id: str, run_id: str) -> None:
         runtime,
         run_root,
     )
+
+
+def source_video_path(data_root: Path, clip_id: str, eye: str) -> Path:
+    if eye not in {"left", "right"}:
+        raise HTTPException(status_code=404, detail=f"Unsupported source video eye: {eye}")
+    root = data_root.resolve()
+    file_name = "video_left.mp4" if eye == "left" else "video_right.mp4"
+    target = (root / clip_id / file_name).resolve()
+    if root not in target.parents:
+        raise HTTPException(status_code=404, detail=f"Source video not found: {clip_id}/{eye}")
+    return target
+
+
+def story_summary(run_root: Path) -> dict[str, object]:
+    story_path = run_root / "review" / "story.json"
+    if not story_path.exists():
+        return {"status": "missing", "clip_count": 0}
+    story = json.loads(story_path.read_text(encoding="utf-8"))
+    clips = story.get("clips", [])
+    return {
+        "status": "ready",
+        "clip_count": len(clips) if isinstance(clips, list) else 0,
+        "raw_detection_count": story.get("raw_detection_count", 0),
+        "kept_detection_count": story.get("kept_detection_count", 0),
+        "rejected_detection_count": story.get("rejected_detection_count", 0),
+    }
 
 
 def serve(host: str, port: int) -> None:

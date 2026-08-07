@@ -88,6 +88,8 @@ def test_tracking_exports_and_review_manifest_are_available() -> None:
     )
     assert review.returncode == 0, review.stderr
     manifest = json.loads((run_root / "review" / "platforms.json").read_text(encoding="utf-8"))
+    assert "/#/experiments/" in manifest["mlflow"]["url"]
+    assert f"/runs/{tracking['mlflow']['run_id']}" in manifest["mlflow"]["url"]
     assert manifest["fiftyone"]["status"] in {"ready", "path_only"}
     assert manifest["label_studio"]["status"] in {"ready", "import_file"}
     assert "DVC-style content refs" in manifest["dvc"]["message"]
@@ -143,6 +145,7 @@ def test_lineage_replay_publishes_review_platform_manifest() -> None:
     child_root = runs_root() / child_suite / child_run
     platforms = json.loads((child_root / "review" / "platforms.json").read_text(encoding="utf-8"))
     assert platforms["mlflow"]["status"] == "ready"
+    assert "/#/experiments/" in platforms["mlflow"]["url"]
     assert platforms["dvc"]["status"] == "ready"
     assert "DVC-style content refs" in platforms["dvc"]["message"]
     assert platforms["evidently"]["status"] == "ready"

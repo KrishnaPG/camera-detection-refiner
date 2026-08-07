@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>HandDetect Story Review</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05080c;
+        --panel: #0b1118;
+        --panel-strong: #101923;
+        --line: #1c3042;
+        --text: #eff6ff;
+        --muted: #91a4b8;
+        --blue: #2f7dff;
+        --green: #30d158;
+        --red: #ff453a;
+        --amber: #ffd60a;
+        --cyan: #2ee6d6;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 0.875rem;
+      }
+      a { color: var(--cyan); }
+      .shell { display: grid; grid-template-rows: 3.5rem minmax(0, 1fr) 13rem; height: 100vh; }
+      .header {
+        display: grid;
+        grid-template-columns: 17rem 1fr auto;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        background: #070c12;
+      }
+      .run { padding: 0 1rem; font-size: 1rem; font-weight: 650; }
+      .metrics { display: grid; grid-template-columns: repeat(7, minmax(6rem, 1fr)); height: 100%; border-left: 1px solid var(--line); }
+      .metric { padding: 0.55rem 0.8rem; border-right: 1px solid var(--line); }
+      .metric span { display: block; color: var(--muted); font-size: 0.72rem; }
+      .metric strong { display: block; margin-top: 0.2rem; font-size: 1rem; }
+      .status { color: var(--green); }
+      .links { display: flex; gap: 0.5rem; padding: 0 0.8rem; }
+      .linkButton, button {
+        border: 1px solid var(--line);
+        background: #0c1520;
+        color: var(--text);
+        border-radius: 0.375rem;
+        padding: 0.45rem 0.65rem;
+        text-decoration: none;
+      }
+      .main { display: grid; grid-template-columns: 17rem minmax(0, 1fr) 18rem; min-height: 0; }
+      .panel { min-height: 0; background: var(--panel); border-right: 1px solid var(--line); overflow: auto; }
+      .panelTitle { padding: 0.9rem 0.85rem 0.4rem; color: var(--muted); text-transform: uppercase; font-size: 0.72rem; }
+      .clip { display: grid; grid-template-columns: 4.25rem 1fr; gap: 0.6rem; margin: 0.45rem; padding: 0.45rem; border: 1px solid #17283a; border-radius: 0.45rem; background: #081019; text-align: left; width: calc(100% - 0.9rem); }
+      .clip.active { border-color: var(--blue); box-shadow: inset 0 0 0 1px rgba(47, 125, 255, 0.45); }
+      .thumb { aspect-ratio: 16 / 10; background: #111c28; border: 1px solid var(--line); }
+      .clip strong { display: block; }
+      .clip span { color: var(--muted); font-size: 0.75rem; }
+      .viewer { display: grid; grid-template-rows: minmax(0, 1fr) 2.8rem; min-width: 0; background: #070b10; }
+      .videoGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; padding: 0.75rem; min-height: 0; }
+      .videoPane { position: relative; border: 1px solid var(--line); background: #000; overflow: hidden; }
+      .videoPane video { width: 100%; height: 100%; object-fit: contain; display: block; }
+      .badge { position: absolute; left: 0.6rem; top: 0.55rem; padding: 0.28rem 0.45rem; border-radius: 0.25rem; font-size: 0.72rem; font-weight: 700; background: rgba(12, 21, 32, 0.82); border: 1px solid currentColor; }
+      .raw { color: var(--blue); }
+      .approved { color: var(--green); }
+      .sync { position: absolute; right: 0.6rem; bottom: 0.55rem; color: var(--green); background: rgba(8, 14, 20, 0.84); padding: 0.2rem 0.45rem; border-radius: 0.25rem; }
+      .controls { display: flex; align-items: center; justify-content: center; gap: 0.55rem; border-top: 1px solid var(--line); background: #09111a; }
+      .inspector { border-right: 0; }
+      .decisionCard { margin: 0.75rem; border: 1px solid var(--line); background: var(--panel-strong); border-radius: 0.45rem; padding: 0.75rem; }
+      .decisionLabel { display: inline-block; margin: 0.4rem 0; padding: 0.25rem 0.45rem; border-radius: 0.25rem; font-weight: 750; background: rgba(255, 69, 58, 0.18); color: var(--red); }
+      .kv { display: grid; grid-template-columns: 6.5rem 1fr; gap: 0.35rem; margin-top: 0.55rem; color: var(--muted); font-size: 0.78rem; }
+      .kv strong { color: var(--text); font-weight: 550; overflow-wrap: anywhere; }
+      .support { padding: 0 0.75rem 0.75rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+      .pill { border: 1px solid var(--line); padding: 0.25rem 0.4rem; border-radius: 0.3rem; color: var(--muted); font-size: 0.72rem; }
+      .pill.implemented_rejection { color: var(--green); }
+      .pill.heuristic_candidate { color: #bf8cff; }
+      .pill.not_supported { color: #8d98a5; border-style: dashed; }
+      .timeline { border-top: 1px solid var(--line); background: #071019; display: grid; grid-template-columns: 17rem 1fr 18rem; min-height: 0; }
+      .trackList { border-right: 1px solid var(--line); padding: 0.75rem; overflow: auto; }
+      .timeSurface { position: relative; padding: 1rem; overflow: hidden; border-right: 1px solid var(--line); }
+      .ruler { height: 2.2rem; border-bottom: 1px solid var(--line); color: var(--muted); }
+      .lane { height: 1.25rem; margin: 0.35rem 0; background: rgba(48, 209, 88, 0.16); border-left: 3px solid var(--green); }
+      .markers { position: absolute; left: 1rem; right: 1rem; bottom: 1rem; height: 6rem; border-top: 1px solid #123047; }
+      .marker { position: absolute; bottom: 0.35rem; width: 0.55rem; height: 0.55rem; transform: rotate(45deg); background: var(--red); border: 0; padding: 0; }
+      .marker.merged { background: var(--amber); }
+      .playhead { position: absolute; top: 1rem; bottom: 1rem; left: 50%; width: 2px; background: var(--blue); box-shadow: 0 0 0 1px rgba(47, 125, 255, 0.35); }
+      .platforms { padding: 0.75rem; overflow: auto; }
+      .platform { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid #152536; }
+    </style>
+  </head>
+  <body>
+    <div class="shell" data-story='{{ story | tojson }}'>
+      <header class="header">
+        <div class="run">
+          {{ story.run_suite_id }}<br />
+          <span class="status">{{ story.status }}</span>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span>Run</span><strong>{{ story.run_id }}</strong></div>
+          <div class="metric"><span>Clips</span><strong>{{ story.clips | length }}</strong></div>
+          <div class="metric"><span>Raw</span><strong>{{ story.raw_detection_count }}</strong></div>
+          <div class="metric"><span>Kept</span><strong>{{ story.kept_detection_count }}</strong></div>
+          <div class="metric"><span>Rejected</span><strong>{{ story.rejected_detection_count }}</strong></div>
+          <div class="metric"><span>Interpolation</span><strong>{{ story.interpolated_detection_count }}</strong></div>
+          <div class="metric"><span>Layout</span><strong>{{ story.default_layout_id }}</strong></div>
+        </div>
+        <nav class="links">
+          <a class="linkButton" href="/runs/{{ suite_id }}/{{ run_id }}">Run</a>
+          <a class="linkButton" href="/artifacts/{{ suite_id }}/{{ run_id }}/review/story.json">Story JSON</a>
+        </nav>
+      </header>
+      <main class="main">
+        <aside class="panel">
+          <div class="panelTitle">Clips</div>
+          {% for clip in story.clips %}
+          <button class="clip{% if loop.first %} active{% endif %}" data-clip-index="{{ loop.index0 }}">
+            <span class="thumb"></span>
+            <span>
+              <strong>{{ clip.clip_id }}</strong>
+              <span>{{ clip.label }}</span><br />
+              <span>{{ clip.frame_count }} frames · {{ clip.rejected_detection_count }} changed</span>
+            </span>
+          </button>
+          {% endfor %}
+          <div class="panelTitle">Edge Cases</div>
+          <div class="support">
+            {% for state in story.support_states %}
+            <span class="pill {{ state.state }}">{{ state.label }}</span>
+            {% endfor %}
+          </div>
+        </aside>
+        <section class="viewer">
+          <div class="videoGrid">
+            <div class="videoPane">
+              <video id="rawVideo" controls muted preload="metadata"></video>
+              <span class="badge raw">RAW DETECTOR</span>
+            </div>
+            <div class="videoPane">
+              <video id="adapterVideo" controls muted preload="metadata"></video>
+              <span class="badge approved">APPROVED HAND TRACKS</span>
+              <span class="sync">Sync</span>
+            </div>
+          </div>
+          <div class="controls">
+            <button id="prevEvent" type="button">Prev Event</button>
+            <button id="playPause" type="button">Play/Pause</button>
+            <button id="nextEvent" type="button">Next Event</button>
+            <span id="timeLabel">00:00.000</span>
+          </div>
+        </section>
+        <aside class="panel inspector">
+          <div class="panelTitle">Detection Decision</div>
+          <div class="decisionCard" id="decisionCard">Select a timeline marker.</div>
+        </aside>
+      </main>
+      <footer class="timeline">
+        <div class="trackList">
+          <strong>Tracks</strong>
+          <div id="trackList"></div>
+        </div>
+        <div class="timeSurface">
+          <div class="ruler" id="ruler">Loading timeline</div>
+          <div id="lanes"></div>
+          <div class="markers" id="markers"></div>
+          <div class="playhead"></div>
+        </div>
+        <div class="platforms">
+          <strong>Platform Bridge</strong>
+          {% for platform in story.platforms %}
+          <div class="platform">
+            <span>{{ platform.label }}</span>
+            {% if platform.url %}
+            <a href="{{ platform.url }}">{{ platform.status }}</a>
+            {% else %}
+            <span>{{ platform.status }}</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </footer>
+    </div>
+    <script>
+      const root = document.querySelector(".shell");
+      const story = JSON.parse(root.dataset.story);
+      const rawVideo = document.getElementById("rawVideo");
+      const adapterVideo = document.getElementById("adapterVideo");
+      const timeLabel = document.getElementById("timeLabel");
+      const decisionCard = document.getElementById("decisionCard");
+      let activeClip = story.clips[0];
+      let events = [];
+      let eventIndex = 0;
+
+      async function loadClip(clip) {
+        activeClip = clip;
+        rawVideo.src = clip.source_video_url;
+        adapterVideo.src = clip.source_video_url;
+        const [eventPayload, timelinePayload, trackPayload] = await Promise.all([
+          fetch(`/artifacts/{{ suite_id }}/{{ run_id }}/${clip.events_path}`).then((r) => r.json()),
+          fetch(`/artifacts/{{ suite_id }}/{{ run_id }}/${clip.timeline_path}`).then((r) => r.json()),
+          fetch(`/artifacts/{{ suite_id }}/{{ run_id }}/${clip.tracks_path}`).then((r) => r.json()),
+        ]);
+        events = eventPayload.events.filter((event) => event.decision !== "kept");
+        eventIndex = 0;
+        renderTimeline(timelinePayload);
+        renderTracks(trackPayload);
+        selectEvent(0);
+      }
+
+      function renderTimeline(timeline) {
+        document.getElementById("ruler").textContent = `${timeline.frame_count} frames · ${timeline.fps} FPS`;
+        const markers = document.getElementById("markers");
+        markers.innerHTML = "";
+        const laneLastLeft = [];
+        const markerLaneCount = 6;
+        const markerMinGapPct = 2.4;
+        timeline.markers.slice(0, 350).forEach((marker, index) => {
+          const markerLeft = Math.min(99, (marker.frame / Math.max(timeline.frame_count, 1)) * 100);
+          let markerLane = laneLastLeft.findIndex((left) => markerLeft - left > markerMinGapPct);
+          if (markerLane === -1 && laneLastLeft.length < markerLaneCount) {
+            markerLane = laneLastLeft.length;
+          }
+          if (markerLane === -1) {
+            markerLane = index % markerLaneCount;
+          }
+          laneLastLeft[markerLane] = markerLeft;
+          const button = document.createElement("button");
+          button.className = `marker ${marker.decision}`;
+          button.style.left = `${markerLeft}%`;
+          button.style.bottom = `${0.35 + markerLane * 0.78}rem`;
+          button.style.zIndex = String(1000 - index);
+          button.title = `${marker.frame} · ${marker.label}`;
+          button.addEventListener("click", () => selectEvent(index));
+          markers.appendChild(button);
+        });
+        const lanes = document.getElementById("lanes");
+        lanes.innerHTML = timeline.track_lanes.slice(0, 8).map(() => '<div class="lane"></div>').join("");
+      }
+
+      function renderTracks(payload) {
+        document.getElementById("trackList").innerHTML = payload.tracks.slice(0, 12).map((track) =>
+          `<p>ID ${track.track_id}<br /><span>${track.start_frame}-${track.end_frame} · ${track.observation_count} observations</span></p>`
+        ).join("");
+      }
+
+      function selectEvent(index) {
+        if (events.length === 0) {
+          decisionCard.textContent = "No adapter decision events for this clip.";
+          return;
+        }
+        eventIndex = Math.max(0, Math.min(index, events.length - 1));
+        const event = events[eventIndex];
+        const seconds = event.frame / Math.max(activeClip.fps, 1);
+        rawVideo.currentTime = seconds;
+        adapterVideo.currentTime = seconds;
+        decisionCard.innerHTML = `
+          <span class="decisionLabel">${event.decision.toUpperCase()}</span>
+          <div class="kv">
+            <span>Frame</span><strong>${event.frame}</strong>
+            <span>Detection</span><strong>${event.detection_id}</strong>
+            <span>Track</span><strong>${event.track_id ?? "--"}</strong>
+            <span>Confidence</span><strong>${event.confidence.toFixed(3)}</strong>
+            <span>Stage</span><strong>${event.stage}</strong>
+            <span>Reason</span><strong>${event.display_label}</strong>
+          </div>`;
+      }
+
+      function syncVideos(source, target) {
+        if (Math.abs(source.currentTime - target.currentTime) > 0.08) {
+          target.currentTime = source.currentTime;
+        }
+      }
+
+      document.querySelectorAll(".clip").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".clip").forEach((item) => item.classList.remove("active"));
+          button.classList.add("active");
+          loadClip(story.clips[Number(button.dataset.clipIndex)]);
+        });
+      });
+      document.getElementById("playPause").addEventListener("click", () => {
+        if (rawVideo.paused) {
+          rawVideo.play();
+          adapterVideo.play();
+        } else {
+          rawVideo.pause();
+          adapterVideo.pause();
+        }
+      });
+      document.getElementById("prevEvent").addEventListener("click", () => selectEvent(eventIndex - 1));
+      document.getElementById("nextEvent").addEventListener("click", () => selectEvent(eventIndex + 1));
+      rawVideo.addEventListener("timeupdate", () => {
+        syncVideos(rawVideo, adapterVideo);
+        timeLabel.textContent = `${rawVideo.currentTime.toFixed(3)}s`;
+      });
+      loadClip(activeClip);
+    </script>
+  </body>
+</html>

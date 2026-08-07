@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from handdetect.workbench.server import (
     allowed_cors_origins,
     create_app,
     parse_run_ids,
     self_contained_job_script,
+    source_video_path,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -78,11 +81,70 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
     assert f"{suite_id}/{run_id}" in response.text
     assert "Static report" in response.text
     assert "Visual review" in response.text
+    assert "Local Story Review" in response.text
     assert f"/artifacts/{suite_id}/{run_id}/report/visual-review.html" in response.text
     assert "http://10.7.0.4:60900" in response.text
     assert "http://10.7.0.4:60901" in response.text
     assert "Open Review Platforms" in response.text
     assert "Replay With Override" in response.text
+
+
+def test_workbench_story_page_renders_video_review_layout(monkeypatch, tmp_path) -> None:
+    suite_id = "suite-20260807-story"
+    run_id = "run-20260807-story"
+    run_root = tmp_path / "runs" / suite_id / run_id
+    review_root = run_root / "review"
+    review_root.mkdir(parents=True)
+    monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(tmp_path / "runs"))
+    monkeypatch.chdir(tmp_path)
+
+    (review_root / "story.json").write_text(
+        json.dumps(
+            {
+                "run_suite_id": suite_id,
+                "run_id": run_id,
+                "status": "complete",
+                "default_layout_id": "handdetect_customer_demo_console",
+                "raw_detection_count": 10,
+                "kept_detection_count": 6,
+                "rejected_detection_count": 4,
+                "interpolated_detection_count": 0,
+                "clips": [
+                    {
+                        "clip_id": "clip-a",
+                        "label": "fixture",
+                        "frame_count": 120,
+                        "rejected_detection_count": 4,
+                    }
+                ],
+                "support_states": [{"label": "Duplicate boxes", "state": "implemented_rejection"}],
+                "platforms": [],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    response = TestClient(create_app()).get(f"/runs/{suite_id}/{run_id}/story")
+
+    assert response.status_code == 200
+    assert "RAW DETECTOR" in response.text
+    assert "APPROVED HAND TRACKS" in response.text
+    assert "Detection Decision" in response.text
+    assert "Platform Bridge" in response.text
+
+
+def test_source_video_path_blocks_escape_and_unknown_eye(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    clip_root = data_root / "clip-a"
+    clip_root.mkdir(parents=True)
+    (clip_root / "video_left.mp4").write_bytes(b"mp4")
+
+    assert source_video_path(data_root, "clip-a", "left") == (clip_root / "video_left.mp4")
+    with pytest.raises(HTTPException):
+        source_video_path(data_root, "..", "left")
+    with pytest.raises(HTTPException):
+        source_video_path(data_root, "clip-a", "center")
 
 
 def test_workbench_review_open_runs_launcher_in_server_process(monkeypatch, tmp_path) -> None:

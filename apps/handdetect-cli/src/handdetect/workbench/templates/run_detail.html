@@ -11,6 +11,7 @@
     <ul>
       {% if platforms %}
       <li><a href="{{ platforms.report.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/index.html') }}">Static report</a></li>
+      <li><a href="/runs/{{ suite_id }}/{{ run_id }}/story">Local Story Review</a></li>
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html">Visual review</a></li>
       <li>MLflow UI{% if platforms.mlflow.url %}: <a href="{{ platforms.mlflow.url }}">{{ platforms.mlflow.url }}</a>{% endif %}</li>
       <li><a href="{{ platforms.evidently.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/evidently.html') }}">Evidently report</a></li>
@@ -18,6 +19,7 @@
       <li><a href="{{ platforms.label_studio.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/labelstudio-tasks.json') }}">Label Studio</a></li>
       {% else %}
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/index.html">Static report</a></li>
+      <li><a href="/runs/{{ suite_id }}/{{ run_id }}/story">Local Story Review</a></li>
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html">Visual review</a></li>
       <li>MLflow UI</li>
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/evidently.html">Evidently report</a></li>
@@ -29,6 +31,14 @@
     <form method="post" action="/runs/{{ suite_id }}/{{ run_id }}/review/open">
       <button type="submit">Open Review Platforms</button>
     </form>
+    <h2>Local Story Review</h2>
+    <p>
+      Status: {{ story.status }}.
+      Clips: {{ story.clip_count }}.
+      Raw: {{ story.raw_detection_count }}.
+      Kept: {{ story.kept_detection_count }}.
+      Rejected/merged: {{ story.rejected_detection_count }}.
+    </p>
     <h2>Metrics</h2>
     <pre>{{ evaluation | tojson(indent=2) }}</pre>
     <pre>{{ regression | tojson(indent=2) }}</pre>

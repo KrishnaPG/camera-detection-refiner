@@ -1,0 +1,3 @@
+[submodule "external/biodock"]
+	path = external/biodock
+	url = git@github.com:KrishnaPG/biodock.git

@@ -1,0 +1,150 @@
+{
+  "workspaceId": "handdetect_quality_story",
+  "defaultLayoutId": "handdetect_customer_demo_console",
+  "selectorGroupLabel": "HandDetect",
+  "panels": [
+    {
+      "panelId": "handdetect_story_header",
+      "viewId": "handdetect_story_runs_v1",
+      "appPanel": "biodock.cViewPanel",
+      "title": "Story Header"
+    },
+    {
+      "panelId": "handdetect_clip_navigator",
+      "viewId": "handdetect_story_clips_v1",
+      "appPanel": "biodock.cViewPanel",
+      "title": "Clip Navigator"
+    },
+    {
+      "panelId": "handdetect_rejection_taxonomy",
+      "viewId": "handdetect_story_rejections_v1",
+      "appPanel": "biodock.cViewPanel",
+      "title": "Rejection Taxonomy"
+    },
+    {
+      "panelId": "handdetect_synchronized_viewer",
+      "viewId": "handdetect_story_viewer_v1",
+      "appPanel": "biodock.cViewPanel",
+      "title": "Synchronized Viewer"
+    },
+    {
+      "panelId": "handdetect_decision_inspector",
+      "viewId": "handdetect_story_events_v1",
+      "appPanel": "biodock.cViewPanel",
+      "title": "Decision Inspector"
+    },
+    {
+      "panelId": "handdetect_track_explorer",
+      "viewId": "handdetect_story_tracks_v1",
+      "appPanel": "biodock.cViewPanel",
+      "title": "Track Explorer"
+    },
+    {
+      "panelId": "handdetect_timeline",
+      "viewId": "handdetect_story_timeline_v1",
+      "appPanel": "biodock.cViewPanel",
+      "title": "Timeline"
+    },
+    {
+      "panelId": "handdetect_platform_bridge",
+      "viewId": "handdetect_story_platforms_v1",
+      "appPanel": "biodock.generatorArtifacts",
+      "title": "Platform Bridge"
+    },
+    {
+      "panelId": "handdetect_diagnostics",
+      "viewId": "handdetect_story_diagnostics_v1",
+      "appPanel": "biodock.cViewPanel",
+      "title": "Diagnostics"
+    }
+  ],
+  "layouts": [
+    {
+      "layoutId": "handdetect_customer_demo_console",
+      "label": "Customer Demo Console",
+      "category": "review",
+      "extends": "berg10.generator.videoReview",
+      "slots": {
+        "slot.status": [
+          "handdetect_story_header"
+        ],
+        "slot.review": [
+          "handdetect_clip_navigator",
+          "handdetect_rejection_taxonomy"
+        ],
+        "slot.primary": [
+          "handdetect_synchronized_viewer"
+        ],
+        "slot.inspector": [
+          "handdetect_decision_inspector",
+          "handdetect_track_explorer"
+        ],
+        "slot.history": [
+          "handdetect_timeline"
+        ],
+        "slot.artifacts": [
+          "handdetect_platform_bridge"
+        ],
+        "slot.diagnostics": [
+          "handdetect_diagnostics"
+        ]
+      },
+      "description": "Frame-synchronized raw detector versus adapter output, with MOT tracks and decision explanations visible in the first viewport.",
+      "audience": "Evaluator, customer, or reviewer validating HandDetect false-positive handling visually.",
+      "bestFor": "Demoing the adapter value, showing ByteTrack continuity, and jumping through rejection categories.",
+      "useWhen": "Use for smoke-run review, customer demos, and first-pass visual QA.",
+      "avoidWhen": "Avoid for annotation batch correction; use Annotation Handoff once CVAT is configured."
+    },
+    {
+      "layoutId": "handdetect_forensic_review_bay",
+      "label": "Forensic Review Bay",
+      "category": "debug",
+      "extends": "berg10.generator.debug",
+      "slots": {
+        "slot.status": [
+          "handdetect_story_header"
+        ],
+        "slot.primary": [
+          "handdetect_synchronized_viewer"
+        ],
+        "slot.debug": [
+          "handdetect_rejection_taxonomy"
+        ],
+        "slot.audit": [
+          "handdetect_decision_inspector"
+        ],
+        "slot.history": [
+          "handdetect_timeline"
+        ],
+        "slot.diagnostics": [
+          "handdetect_diagnostics"
+        ]
+      }
+    },
+    {
+      "layoutId": "handdetect_annotation_handoff",
+      "label": "Annotation Handoff",
+      "category": "review",
+      "extends": "berg10.generator.review",
+      "slots": {
+        "slot.review": [
+          "handdetect_rejection_taxonomy"
+        ],
+        "slot.reviewDetail": [
+          "handdetect_synchronized_viewer",
+          "handdetect_decision_inspector"
+        ],
+        "slot.artifacts": [
+          "handdetect_platform_bridge"
+        ],
+        "slot.history": [
+          "handdetect_timeline"
+        ]
+      }
+    }
+  ],
+  "theme": {
+    "overrideCssPath": "ui/themes/handdetect-story.overrides.css",
+    "extends": "base"
+  }
+}

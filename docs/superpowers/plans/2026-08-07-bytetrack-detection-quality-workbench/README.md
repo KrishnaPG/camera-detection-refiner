@@ -4,7 +4,7 @@
 
 **Goal:** Build a production-shaped false-positive hand-detection quality workbench that cleans raw detector boxes with ByteTrack MOT, emits auditable corrected detections, supports repeatable experiments, and demonstrates accuracy with labeled and visual review artifacts.
 
-**Architecture:** The adapter is a library-first pipeline with typed boundary parsers, Arrow/NumPy hot-path buffers, a ByteTrack association adapter, pluggable false-positive filters, immutable run storage, MLflow/DVC/Evidently experiment tracking, BioDock Berg10 Generator Package review panels, and static fallback review outputs. The CLI remains a public entrypoint for automation, but the primary user-facing review journey is the BioDock story page. Batch/API/streaming/edge wrappers must reuse the same `AdapterPipeline.run_clip()` core contract.
+**Architecture:** HandDetect is a UI-agnostic, library-first pipeline with typed boundary parsers, Arrow/NumPy hot-path buffers, a ByteTrack association adapter, pluggable false-positive filters, immutable run storage, MLflow/DVC/Evidently experiment tracking, optional BioDock Berg10 Generator Package review panels, and local fallback review outputs. The CLI remains the canonical public entrypoint for automation and must run without BioDock. When UI is available, HandDetect integrates with Berg10 only through the BioDock Generator SDK and package descriptors. Batch/API/streaming/edge wrappers must reuse the same `AdapterPipeline.run_clip()` core contract.
 
 **Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.2.6`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `plotly==5.24.1`, `opencv-python-headless==4.12.0.88`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==0.25.2`, `label-studio-sdk==2.1.0`, `fastapi==0.141.1`, `starlette==0.46.2`, `uvicorn==0.52.1`, `jinja2==3.1.6`, `pyyaml==6.0.3`, `tomlkit==0.15.1`, `python-multipart==0.0.32`.
 
@@ -16,7 +16,7 @@
 - The legacy `supervision.ByteTrack` API is not allowed because current Supervision docs deprecate it in favor of the external `trackers` package.
 - Every CLI invocation must create a new immutable `RunSuiteId`; every experiment inside that suite must create a new immutable `RunId`; rerunning the same config must never overwrite an earlier run.
 - Every experiment must be identified by `ExperimentId`; every input clip must retain `ClipId` provenance from `meta.json`.
-- BioDock Berg10 Generator Package integration is mandatory for the visual review journey. Static HTML is a fallback artifact hub only; it must not be the primary customer demo surface.
+- BioDock Berg10 Generator Package integration is mandatory for the first-class visual review journey, but it is optional for core HandDetect execution. Static HTML/local FastAPI review is a fallback artifact hub only; it must not become a competing Berg10 runtime.
 - MLflow tracking is mandatory for experiment parameters, scalar metrics, tags, and artifacts. The default tracking URI is a Docker-managed MLflow service/profile path; typed config may point to a remote MLflow server later.
 - DVC/DVCLive outputs are mandatory for git-friendly metrics and plots under `dvclive/<run_suite_id>/<run_id>/` so regression charts can be compared without reading custom report HTML.
 - DVC is the authority for restoring exact data, labels, configs, and experiment workspaces. MLflow, FiftyOne, Label Studio, Rerun, BioDock, Evidently, and static fallback HTML must store links back to the DVC/Git-backed lineage bundle rather than becoming competing lineage stores.
@@ -36,12 +36,25 @@
 - Files must remain under 450 LOC; functions under 50 LOC; all function parameters and returns must be annotated; `Any` is allowed only at a documented third-party boundary.
 - Tests enter through root tasks and public CLIs only. Tests must use the real downloaded dataset, generated run manifests, and production entrypoints; no mocks, monkeypatches, fake clients, fake stores, or hardcoded sample payloads.
 - Root task interface must expose `bootstrap`, `doctor`, `run`, `check`, `test`, `verify`, `seed`, `migrate`, and `clean`.
-- Custom standalone React is not part of this delivery. The first-class UI must be implemented as BioDock Berg10 Generator Package panels that reuse BioDock frontend packages, FlexLayout, typed generated contracts, Valtio/TanStack Query ownership rules, and `docs/coding-standards-frontend.md`.
+- Custom standalone React is not part of this delivery. The first-class UI must be implemented as BioDock Berg10 Generator Package panels that reuse BioDock frontend packages, FlexLayout, typed generated contracts, Valtio/TanStack Query ownership rules, and `docs/coding-standards-frontend.md`. The local HandDetect workbench may expose only no-Berg10 fallback orchestration and story artifacts.
 - `PACKAGE_BOUNDARIES.md` and `00-reusable-package-boundaries.md` are normative. Reusable logic must live in `packages/*`; `apps/handdetect-cli` may only wire public commands and re-export types for ergonomics.
 - Existing task snippets that reference `src/handdetect/...` are logical ownership references. Implementers must place reusable code in the package named by the normative path map and keep `apps/handdetect-cli` thin.
 - The code must strictly adhere to `docs/coding-standards.md`, `docs/coding-standards-frontend.md`, and `docs/coding-repo-standards.md`.
 
 ---
+
+## 0A. Ownership And Lifecycle Boundary
+
+This section supersedes any older wording that implied a hard runtime dependency between HandDetect and BioDock.
+
+- HandDetect owns the detection-quality pipeline, assignment data parsing, ByteTrack MOT invocation, false-positive decisions, immutable run artifacts, platform exports, local CLI, and no-Berg10 fallback review artifacts.
+- HandDetect must run from CLI or automation without Berg10, without BioDock services, and without any BioDock Python runtime import in the hot path or core command path.
+- BioDock owns Berg10, Generator SDK reusable authoring/runtime contracts, package-host lifecycle, package workspace layout compilation, base layouts, generic panels, frontend chrome, C-view projection, diagnostics, and browser viewer lifecycle.
+- Berg10 must never depend on HandDetect. HandDetect is one generator package among many, like P2FS or any future package.
+- HandDetect may depend on BioDock only at optional UI/package boundaries: `generator-package/*` descriptors, SQL views, theme overrides, and SDK-authored manifest/workspace generation.
+- Reusable SDK code, reusable base layouts, reusable panel-host helpers, and reusable video-review layout primitives must live in `external/biodock`. HandDetect may keep only app-specific descriptor generation, HandDetect story artifact projection, domain view SQL, and local fallback pages.
+- The reusable `berg10.generator.videoReview` base layout is a BioDock feature available to any generator package. The `handdetect_customer_demo_console`, `handdetect_forensic_review_bay`, and `handdetect_annotation_handoff` layouts are HandDetect package layouts that extend BioDock base layouts.
+- Local fallback routes such as `/runs/<suite_id>/<run_id>/story` are not the Berg10 UI. They exist so HandDetect remains reviewable offline or in environments where Berg10 is unavailable.
 
 ## 0. BioDock Story Page Normative Amendment
 
@@ -62,7 +75,7 @@ This section supersedes older task wording that treated static HTML, FiftyOne, o
 | Story views | `generator-package/views/handdetect_story_views.sql` | Projects run artifacts into Berg10-visible rows and artifacts. |
 | Theme override | `generator-package/ui/themes/handdetect-story.overrides.css` | Must match or improve the checked-in mock visual contract. |
 
-`external/biodock` is currently a development symlink only. Before implementation is complete, the BioDock dependency must be reproducible through either a pinned submodule commit that contains `berg10.generator.videoReview` or published package dependencies for the required BioDock frontend packages.
+`external/biodock` is a pinned submodule in this repository for assignment reproducibility. Long-term production reuse should prefer published BioDock SDK/frontend packages once those package artifacts are available.
 
 ### Panel Mapping And Required BioDock Base Layout
 
@@ -176,7 +189,7 @@ when the capability is not already owned by BioDock or a selected open-source pl
 | Label freezing/versioning | `label-versions` | DVC plus Label Studio/CVAT exports | Create canonicalization wrapper; do not build annotation UI. |
 | Experiment export status | `experiment-tracking` | MLflow, DVC/DVCLive, Evidently | Create thin adapters only; platforms own comparison/charts. |
 | Review platform bridge | `platform-review` | FiftyOne, Label Studio, Rerun, CVAT, Datumaro | Create manifest/bridge adapters only; no custom platform clone. |
-| Story artifact schemas | `vision-review-contracts` | BioDock consumes typed descriptors but does not own HandDetect artifact schema | Create backend/browser contract package only. |
+| Story artifact schemas | HandDetect review artifacts | BioDock consumes typed descriptors but does not own HandDetect-specific artifact semantics | Keep app-specific contracts in HandDetect until a second consumer proves a generic extraction. |
 
 Second-level composites:
 
@@ -187,8 +200,8 @@ Second-level composites:
 | Experiment suite orchestration | `experiment-runner` | No existing package; uses DVC/MLflow handles | Create reusable state-machine runner. |
 | Evaluation/regression gates | `evaluation-regression` | MLflow/DVC/Evidently visualize; they do not compute adapter metrics | Create metric/gate package and export to platforms. |
 | Static fallback reporting | `visual-reporting` | OpenCV/Supervision draw helpers | Create fallback artifact helpers only; not primary UI. |
-| Story artifact projection | `vision-review-artifacts` | Rerun/FiftyOne visualize; BioDock hosts; none owns compact run artifact projection | Create projection package; do not implement viewer runtime. |
-| BioDock package publication | `biodock-generator-package` | BioDock owns runtime/layout/chrome | Create only HandDetect descriptor/view/theme/action publisher; extend BioDock for `berg10.generator.videoReview`. |
+| Story artifact projection | HandDetect review artifacts | Rerun/FiftyOne visualize; BioDock hosts; current projection is HandDetect-specific | Keep in HandDetect app code; extract only after a second package needs the same contract. |
+| BioDock package publication | BioDock Generator SDK plus HandDetect descriptors | BioDock owns SDK/runtime/layout/chrome | Put reusable SDK authoring in BioDock; keep only HandDetect descriptor/view/theme/action files and app-specific builder script here. |
 | Platform journey manifest | `review-journey` | Platforms own their own UIs | Create run-scoped URL/status manifest and launcher only. |
 | Lineage replay | `lineage-replay` | Git/DVC own restore bytes | Create orchestration package only; no custom lineage database. |
 
@@ -197,7 +210,7 @@ Third-level/fixed-point modules:
 | Module | Existing Or Close Owner | Decision |
 |---|---|---|
 | `replay-workbench` | BioDock is primary UI | Keep only fallback FastAPI orchestration. Do not build another visual workbench. |
-| `biodock-vision-review-workspace` | BioDock packages already own workspace runtime, FlexLayout, diagnostics, hot refs, streams, C-view projection, and visual contracts | Do not create this package. Extend BioDock packages in place or pin the required BioDock commit. |
+| `biodock-vision-review-workspace` | BioDock packages already own workspace runtime, FlexLayout, diagnostics, hot refs, streams, C-view projection, and visual contracts | Do not create this package in HandDetect. Extend BioDock packages in place or pin the required BioDock commit. |
 | `detector-quality-workbench` | Conceptual composition | Do not create until there are multiple concrete consumers. |
 | `handdetect-domain` | Business-specific | Create for hand vocabulary/config constants only. |
 | `handdetect-io` | Business-specific assignment data layout | Create for ZED/WiLoR/VIO parsing only. |
@@ -216,7 +229,7 @@ Third-level/fixed-point modules:
   - `runs/<run_suite_id>/<run_id>/audit/<clip_id>.jsonl` records every input detection as `kept`, `merged`, or `rejected` with stage, reason, source detection id, destination detection id when merged, track id when available, and provenance.
   - `runs/<run_suite_id>/<run_id>/tables/*.parquet` stores metrics, detections, tracks, and decisions for fast comparison across runs and experiments.
   - `runs/index/run_index.parquet` and `runs/index/metric_history.parquet` append one row per run and per metric so regressions can be queried by `RunSuiteId`, `RunId`, `ExperimentId`, config hash, git commit, dataset hash, label-set id, metric name, and metric value.
-  - `handdetect review open --suite-id <id> --run-id <id>` opens or prints stable local URLs for BioDock Story Review, MLflow comparison, FiftyOne visual review, Label Studio correction, Evidently regression report/workspace, DVC plots, Rerun recording, and the static fallback report hub.
+  - `handdetect review open --suite-id <id> --run-id <id>` opens or prints stable local URLs for BioDock Story Review when Berg10 is available, Local Story Review when it is not, MLflow comparison, FiftyOne visual review, Label Studio correction, Evidently regression report/workspace, DVC plots, Rerun recording, and the static fallback report hub.
   - `handdetect lineage replay --from-run <suite_id>/<run_id> --set adapter.max_center_speed_px_per_s=3900.0` restores the exact parent data/labels/config/code in an isolated worktree, applies the override, runs a child experiment, gates regression against the parent, and opens the new review journey.
   - `handdetect workbench serve` opens the local orchestration surface only when BioDock is unavailable; the preferred run page is BioDock/Berg10 with a replay button, typed parameter overrides, lineage proof, regression status, visual story review, and links into MLflow/DVC/Evidently/FiftyOne/Label Studio/CVAT/Datumaro/Rerun.
 - Non-goals:
@@ -277,18 +290,17 @@ Third-level/fixed-point modules:
     hashing, and DVC add hooks.
   - `experiment-tracking`: MLflow, DVC/DVCLive, Evidently adapters, and export status.
   - `platform-review`: FiftyOne and Label Studio bridges plus review platform manifests.
-  - `vision-review-contracts`: story manifest, clip timeline, event, track, chapter,
-    layer, panel, support-state, and platform-link contracts.
+  - HandDetect story artifacts: app-specific story manifest, clip timeline, event, track,
+    chapter, support-state, and platform-link projection. Do not extract until reused by a
+    second package.
 - Reusable extraction round 2 creates composites from round 1:
   - `mot-bytetrack`: ByteTrack adapter over `mot-interfaces` and `vision-columnar`.
   - `dq-filter-kit`: reusable filter registries and generic false-positive strategy hooks.
   - `experiment-runner`: suite state machines, bounded execution, run storage, and tracking.
   - `evaluation-regression`: label matching, metrics, calibration, history scans, and gates.
   - `visual-reporting`: sampled overlays, contact sheets, and static report fragments.
-  - `vision-review-artifacts`: overlay video generation, compact timeline/event/track
-    projections, chapter extraction, thumbnail strips, and Rerun recording manifests.
-  - `biodock-generator-package`: HandDetect Generator Package manifest publishing,
-    Berg10 view definitions, workspace descriptor validation, and package action wiring.
+  - HandDetect Generator Package assets: package manifest/workspace generation, Berg10 view
+    definitions, theme overrides, and action wiring, using BioDock SDK authoring helpers.
   - `review-journey`: one-command platform hub over tracking and review bridges.
   - `lineage-replay`: replay locks, DVC/Git refs, isolated worktrees, and typed overrides.
 - Reusable extraction round 3 creates the final product-shell package:
@@ -317,9 +329,6 @@ Third-level/fixed-point modules:
   - `visual-reporting`
   - `platform-review`
   - `review-journey`
-  - `vision-review-contracts`
-  - `vision-review-artifacts`
-  - `biodock-generator-package`
   - `lineage-replay`
   - `replay-workbench`
 - Final domain/business module list:

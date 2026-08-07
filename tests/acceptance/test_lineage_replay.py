@@ -349,6 +349,21 @@ def test_lineage_replay_does_not_symlink_missing_relative_inputs(monkeypatch, tm
     assert not worktree_data.exists()
 
 
+def test_lineage_replay_restores_snapshot_files_with_hardlinks(tmp_path: Path) -> None:
+    snapshot_root = tmp_path / "snapshot"
+    worktree = tmp_path / "worktree"
+    source_file = snapshot_root / "data" / "clip-a" / "video_left.mp4"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_bytes(b"video-bytes")
+
+    restore_mode = LineageReplayService()._restore_source_snapshot(snapshot_root, worktree)
+
+    restored_file = worktree / "data" / "clip-a" / "video_left.mp4"
+    assert restore_mode == "source_snapshot"
+    assert restored_file.read_bytes() == b"video-bytes"
+    assert restored_file.stat().st_ino == source_file.stat().st_ino
+
+
 def test_lineage_capture_snapshots_selected_clip_data(tmp_path, monkeypatch) -> None:
     repo_root = tmp_path / "repo"
     data_root = repo_root / "data"

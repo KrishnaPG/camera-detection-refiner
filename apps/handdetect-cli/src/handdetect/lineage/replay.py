@@ -169,10 +169,10 @@ class LineageReplayService:
         for item in snapshot_root.iterdir():
             target = worktree / item.name
             if item.is_dir():
-                shutil.copytree(item, target, dirs_exist_ok=True)
+                shutil.copytree(item, target, dirs_exist_ok=True, copy_function=_link_or_copy_file)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(item, target)
+            _link_or_copy_file(item, target)
         return "source_snapshot"
 
     def _restore_inputs(
@@ -385,3 +385,14 @@ class LineageReplayService:
             child_root,
         )
         return mlflow_status.run_id
+
+
+def _link_or_copy_file(source: str | Path, target: str | Path) -> str:
+    source_path = Path(source)
+    target_path = Path(target)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(source_path, target_path)
+    except OSError:
+        shutil.copy2(source_path, target_path)
+    return str(target_path)

@@ -1,0 +1,80 @@
+{
+  "$schema": "../external/biodock/external/berg10-state-server/schemas/berg10/berg10-generator-package-manifest.schema.json",
+  "api_version": "berg10.generator_package.v1alpha2",
+  "kind": "GeneratorPackage",
+  "metadata": {
+    "package_id": "handdetect_quality_adapter",
+    "alias": "handdetect",
+    "version": "2026.08.07",
+    "display_name": "HandDetect Quality Adapter",
+    "generator_id": "handdetect-quality-adapter"
+  },
+  "activation": {
+    "match": {
+      "source_kind": "handdetect_quality_run",
+      "producer_id": "handdetect-quality-adapter",
+      "producer_versions": [
+        ">=2026.08.07 <2027.0.0"
+      ]
+    },
+    "conflict_policy": "reject_ambiguous_active_match"
+  },
+  "implementation": {
+    "language": "python",
+    "module": "handdetect.cli.main",
+    "host_entrypoint": "handdetect"
+  },
+  "actions": [
+    {
+      "action_id": "handdetect.run_smoke_experiment",
+      "title": "Run smoke experiment",
+      "description": "Run the HandDetect smoke experiment and publish run-scoped visual review artifacts.",
+      "outputs": [
+        {
+          "role": "handdetect_run_events",
+          "kind": "raw_source",
+          "view_id": null
+        },
+        {
+          "role": "handdetect_story_projection",
+          "kind": "c_view",
+          "view_id": "handdetect_story_runs_v1"
+        },
+        {
+          "role": "handdetect_review_artifacts",
+          "kind": "artifact",
+          "view_id": null
+        }
+      ],
+      "durability": "durable_berg10",
+      "ingress": "berg10_generator_command",
+      "allowed_callers": [
+        "ui",
+        "cli",
+        "generator_host"
+      ]
+    }
+  ],
+  "raw_admissions": [
+    {
+      "schema": "schemas/handdetect-run-event.schema.json",
+      "families": [
+        "b_run",
+        "b_artifact",
+        "b_decision"
+      ],
+      "validation": "required_on_accept"
+    }
+  ],
+  "views": [
+    {
+      "sql": "views/handdetect_story_views.sql"
+    }
+  ],
+  "ui": {
+    "selector_group_label": "HandDetect",
+    "workspaces": [
+      "ui/workspace.json"
+    ]
+  }
+}

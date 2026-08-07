@@ -16,6 +16,7 @@ from handdetect.report.overlays import OverlaySampler
 from handdetect.report.sampling import SampleManifestBuilder
 from handdetect.review.fiftyone_export import FiftyOneExporter
 from handdetect.review.labelstudio_export import LabelStudioExporter
+from handdetect.review.story_artifacts import StoryArtifactBuilder
 from handdetect.review_journey.launcher import ReviewJourneyLauncher
 from handdetect.runs.ids import RunSuiteIdProvider
 from handdetect.runs.manifest import SeedManifest
@@ -73,6 +74,7 @@ def run(config: RunConfigOption) -> None:
         OverlaySampler().write_contact_sheet(run_root)
         FiftyOneExporter().export(run_root)
         LabelStudioExporter().export_tasks(run_root)
+        StoryArtifactBuilder().build(run_root, parsed.runtime.workbench_public_url or "")
         StaticLineage().capture(parsed.runtime, run_root, suite_id, run_id, config)
         typer.echo(
             f"suite_id={suite_id} run_id={run_id} report={run_root / 'report' / 'index.html'}"

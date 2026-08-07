@@ -18,7 +18,7 @@ Integrate CVAT for video correction, Datumaro for dataset export/diff/interchang
 
 ## Product Intent
 
-The story page must let an evaluator or customer understand the adapter without reading tables or CLI output. The page must run inside BioDock Berg10 as the visual workspace for the HandDetect Generator Package, not as an unrelated standalone dashboard. The page must answer five questions visually:
+The story page must let an evaluator or customer understand the adapter without reading tables or CLI output. The first-class UI page must run inside BioDock Berg10 as the visual workspace for the HandDetect Generator Package, not as an unrelated standalone dashboard. HandDetect itself remains UI-agnostic and must run without BioDock through CLI or automation. The page must answer five questions visually:
 
 1. What was the full input clip?
 2. What did the detector report on each frame?
@@ -30,9 +30,20 @@ The default experience should feel closer to a professional video editor or VFX 
 
 The checked-in mock image is the visual quality bar. Implementation should match or improve its density, dark editor-grade palette, panel composition, synchronized viewer emphasis, bottom timeline, and customer-demo clarity.
 
-## BioDock Generator Package Direction
+## Ownership And Lifecycle Direction
 
-The adapter should be modeled as a BioDock Generator Package named `handdetect-quality-adapter`. The existing local `external/biodock` symlink is useful for development discovery, but the Phase 1 implementation target is package compatibility with BioDock Berg10 rather than a separate Workbench frontend.
+The adapter should be modeled as a BioDock Generator Package named `handdetect-quality-adapter` only at the optional UI boundary. HandDetect owns the detection-quality pipeline, run artifacts, and fallback review projection. BioDock owns Berg10, package hosting, Generator SDK reusable authoring/runtime helpers, base layouts, generic panels, C-view projection, diagnostics, and browser lifecycle.
+
+Boundary rules:
+
+- HandDetect must run without Berg10 or BioDock services.
+- Berg10 must not import or depend on HandDetect.
+- HandDetect may use BioDock only through Generator SDK authoring/runtime contracts and package descriptors.
+- Reusable SDK code and reusable video-review layout primitives live in `external/biodock`.
+- HandDetect keeps app-specific package metadata, SQL views, theme overrides, action identity, and domain story artifacts.
+- Local fallback story pages are offline/debug review surfaces, not the Berg10-hosted product UI.
+
+## BioDock Generator Package Direction
 
 Generator package identity:
 
@@ -57,22 +68,21 @@ The package must project HandDetect run artifacts into Berg10-visible rows and a
 
 Current local state:
 
-- `external/biodock` is an ignored symlink to `/home/ubuntu/workspace/biodock`.
-- There is no `.gitmodules` entry for BioDock in this repository.
-- The symlink target is a separate working tree and can drift silently.
+- `external/biodock` is a Git submodule pinned by this repository.
+- Reusable BioDock SDK/layout work must be committed in that submodule before the parent repo pins it.
+- The submodule may contain unrelated nested submodule movement; do not treat unrelated nested state as HandDetect ownership.
 
 Decision for Phase 1 design:
 
-- Keep the symlink for exploratory development only.
-- Do not convert to a submodule until the BioDock-side Generator Package API changes required for HandDetect are identified and either upstreamed or intentionally pinned.
-- Before implementation is considered complete, replace the ignored symlink with one of:
-  - a Git submodule pinned to the BioDock commit containing the required base layout and panel host capabilities, or
-  - a published/private package dependency on the specific BioDock frontend packages.
+- Use the submodule for assignment reproducibility.
+- Put reusable Generator SDK authoring helpers, base layouts, and generic panel-host changes in BioDock.
+- Put only `handdetect-quality-adapter` package descriptors, views, theme overrides, and app-specific artifact projection in this repo.
+- Before implementation is considered production-complete, replace local submodule consumption with published/private BioDock SDK/frontend packages where available.
 
 Recommendation:
 
-- If HandDetect must ship as one reproducible repo for the assignment, use a submodule after the BioDock base-layout patch is stable.
-- If the long-term goal is production reuse across projects, prefer published BioDock packages and keep `external/biodock` as a local development convenience only.
+- If HandDetect must ship as one reproducible repo for the assignment, keep the submodule pinned to the BioDock commit containing `berg10.generator.videoReview` and SDK package authoring helpers.
+- If the long-term goal is production reuse across projects, prefer published BioDock packages and keep `external/biodock` as a development convenience only.
 
 The design must not depend on an untracked symlink for repeatability.
 
@@ -173,16 +183,7 @@ The story page should reuse or mirror the following package patterns from `exter
 - `lifecycle-leases`
   - Use for video/canvas listener cleanup and timeline subscription ownership.
 
-New hand-detection-specific frontend packages may be added only when these generic packages do not fit. The expected new packages are:
-
-- `vision-review-contracts`
-  - Strongly typed story manifest, clip timeline, event, track, chapter, layer, and support-state contracts.
-- `vision-review-workspace`
-  - Berg10-compatible story shell helpers and FlexLayout preset contracts.
-- `vision-video-reviewer`
-  - Synchronized video/canvas playback, layer control, and frame stepping.
-- `vision-timeline-reviewer`
-  - Zoomable timeline, track lanes, markers, minimap, brushing, and playhead synchronization.
+New reusable frontend packages should be added to BioDock only when these generic packages do not fit. Do not create `vision-review-contracts`, `vision-review-workspace`, `vision-video-reviewer`, or `vision-timeline-reviewer` in HandDetect during Phase 1. HandDetect may define app-specific panel descriptors and compact JSON artifacts; reusable viewer/timeline SDK primitives belong in BioDock after a concrete second consumer or base-layout need is proven.
 
 BioDock Generator Workspace package integration should use:
 
