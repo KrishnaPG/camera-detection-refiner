@@ -15,6 +15,22 @@ class RegressionGateRunner:
             "raw_detection_count": evaluation["raw_detection_count"],
             "cleaned_detection_count": evaluation["cleaned_detection_count"],
         }
+        if baseline_available and baseline_run_root is not None:
+            baseline = json.loads(
+                (baseline_run_root / "evaluation.json").read_text(encoding="utf-8")
+            )
+            payload["baseline_run_root"] = str(baseline_run_root)
+            payload["metric_deltas"] = {
+                "raw_detection_count": (
+                    evaluation["raw_detection_count"] - baseline["raw_detection_count"]
+                ),
+                "cleaned_detection_count": (
+                    evaluation["cleaned_detection_count"] - baseline["cleaned_detection_count"]
+                ),
+                "rejected_detection_count": (
+                    evaluation["rejected_detection_count"] - baseline["rejected_detection_count"]
+                ),
+            }
         output = run_root / "regression.json"
         output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return output

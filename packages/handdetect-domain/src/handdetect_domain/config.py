@@ -40,6 +40,7 @@ class RuntimeConfig(BaseModel):
     workbench_host: str = "127.0.0.1"
     workbench_port: int = Field(default=8000, ge=1, le=65535)
     label_studio_url: str = ""
+    label_studio_public_url: str = ""
     label_studio_token: str = ""
 
 

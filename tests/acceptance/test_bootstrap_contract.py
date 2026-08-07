@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -39,6 +40,14 @@ def test_dockerfile_uses_build_commit_instead_of_runtime_git() -> None:
     assert "COPY pyproject.toml /workspace/pyproject.toml" in dockerfile
 
 
+def test_dockerignore_only_excludes_root_runtime_dirs() -> None:
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    assert "\n/runs\n" in dockerignore
+    assert "\n/mlruns\n" in dockerignore
+    assert "\n/dvclive\n" in dockerignore
+    assert "\nruns\n" not in dockerignore
+
+
 def test_default_configs_route_runtime_state_to_tmp() -> None:
     for path in [
         ROOT / "configs" / "default-experiments.toml",
@@ -65,6 +74,19 @@ def test_compose_shares_tmp_runtime_state_across_services() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "file:/tmp/handdetect/mlruns" in compose
     assert "- /tmp/handdetect:/tmp/handdetect" in compose
+
+
+def test_compose_starts_review_platform_infra() -> None:
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "fiftyone-mongo:" in compose
+    assert "mongo:7.0.15" in compose
+    assert "FIFTYONE_DATABASE_URI" in compose
+    assert "label-studio:" in compose
+    assert "heartexlabs/label-studio:1.21.0" in compose
+    assert "HANDDETECT_LABEL_STUDIO_URL" in compose
+    assert "HANDDETECT_LABEL_STUDIO_PUBLIC_URL" in compose
+    assert "LABEL_STUDIO_USER_TOKEN" in compose
+    assert '"8080:8080"' in compose
 
 
 def test_default_compose_does_not_source_mount_repo() -> None:
@@ -117,6 +139,41 @@ def test_repo_workspace_has_no_generated_runtime_dirs() -> None:
     generated = ["runs", "dvclive", "mlruns", ".handdetect"]
     present = [path for path in generated if (ROOT / path).exists()]
     assert present == []
+
+
+def test_repo_tracks_imported_handdetect_internal_packages() -> None:
+    source_root = ROOT / "apps" / "handdetect-cli" / "src" / "handdetect"
+    tracked_targets = [
+        path.relative_to(ROOT).as_posix()
+        for package in ("runs", "labels")
+        for path in sorted((source_root / package).glob("*.py"))
+    ]
+    assert tracked_targets
+    result = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", *tracked_targets],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_repo_tracks_runtime_label_assets_used_by_cli_and_dockerfile() -> None:
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY labels /workspace/labels" in dockerfile
+    tracked_targets = [
+        "labels/README.md",
+        "labels/versions/empty-gold-v1/manifest.json",
+    ]
+    result = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", *tracked_targets],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_compose_prepares_tmp_state_then_drops_to_host_uid() -> None:

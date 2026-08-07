@@ -14,15 +14,15 @@ _SESSIONS: dict[str, Any] = {}
 class FiftyOneDatasetPublisher:
     def publish(
         self, suite_id: RunSuiteId, run_id: RunId, run_root: Path
-    ) -> tuple[str, str | None]:
+    ) -> tuple[str, str | None, str | None]:
         manifest = json.loads(
             (run_root / "review" / "fiftyone-dataset.json").read_text(encoding="utf-8")
         )
         dataset_name = manifest["dataset_name"]
         try:
             import fiftyone as fo
-        except Exception:
-            return dataset_name, None
+        except Exception as exc:
+            return dataset_name, None, str(exc)
         try:
             self._reset_dataset(fo, dataset_name)
             dataset = fo.Dataset(dataset_name)
@@ -31,10 +31,10 @@ class FiftyOneDatasetPublisher:
                 dataset.add_sample(self._build_sample(fo, run_root, sample))
             dataset.save()
             session = fo.launch_app(dataset, address="0.0.0.0", port=5151, remote=True, auto=False)
-        except Exception:
-            return dataset_name, None
+        except Exception as exc:
+            return dataset_name, None, str(exc)
         _SESSIONS[dataset_name] = session
-        return dataset_name, f"http://localhost:{session.server_port}"
+        return dataset_name, f"http://localhost:{session.server_port}", None
 
     def _reset_dataset(self, fo: Any, dataset_name: str) -> None:
         if fo.dataset_exists(dataset_name):

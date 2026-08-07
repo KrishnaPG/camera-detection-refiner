@@ -82,6 +82,20 @@ def test_workbench_artifact_route_reports_missing_file(monkeypatch, tmp_path) ->
     assert f"Artifact not found for {suite_id}/{run_id}: missing.html" in response.text
 
 
+def test_workbench_artifact_route_blocks_path_traversal(monkeypatch, tmp_path) -> None:
+    suite_id = "suite-20260807-000003"
+    run_id = "run-20260807-000003"
+    (tmp_path / "runs" / suite_id / run_id).mkdir(parents=True)
+    (tmp_path / "secret.txt").write_text("secret", encoding="utf-8")
+    monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(tmp_path / "runs"))
+    monkeypatch.chdir(tmp_path)
+
+    response = TestClient(create_app()).get(f"/artifacts/{suite_id}/{run_id}/../../../secret.txt")
+
+    assert response.status_code == 404
+    assert "secret" not in response.text
+
+
 def test_parse_run_ids_only_accepts_success_output_line() -> None:
     suite_id, run_id = parse_run_ids(
         """

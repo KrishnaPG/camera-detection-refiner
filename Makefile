@@ -23,13 +23,13 @@ test:
 verify: check test
 
 seed:
-	$(PYTHON) -m handdetect.cli.main seed --data-root data --out runs/seed/seed-manifest.json
+	$(PYTHON) -m handdetect.cli.main seed --data-root data
 
 migrate:
 	$(PYTHON) -m handdetect.cli.main migrate
 
 clean:
-	$(PYTHON) -m handdetect.cli.main clean --runs-root runs
+	$(PYTHON) -m handdetect.cli.main clean
 
 workbench:
 	$(PYTHON) -m handdetect.cli.main workbench serve

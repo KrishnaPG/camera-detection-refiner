@@ -60,6 +60,7 @@ class StaticReportBuilder:
         <h2>Open-Source Tracking</h2>
         <p>MLflow: <code>{tracking.get("mlflow", {}).get("path", "not exported")}</code></p>
         <p>DVC: <code>{tracking.get("dvc", {}).get("path", "not exported")}</code></p>
+        <p>DVC note: {tracking.get("dvc", {}).get("message", "none")}</p>
         <p>Evidently: <code>{tracking.get("evidently", {}).get("path", "not exported")}</code></p>
       </section>
       <section>
@@ -129,4 +130,6 @@ class StaticReportBuilder:
             target = f"<code>{escape(path)}</code>"
         else:
             target = ""
-        return f"          <li>{label}: {status} {target}</li>"
+        message = raw_status.get("message")
+        detail = f" ({escape(str(message))})" if isinstance(message, str) and message else ""
+        return f"          <li>{label}: {status} {target}{detail}</li>"

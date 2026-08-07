@@ -22,7 +22,9 @@ class ReviewJourneyLauncher:
         tracking = json.loads(
             (run_root / "tracking_export_status.json").read_text(encoding="utf-8")
         )
-        dataset_name, fiftyone_url = FiftyOneDatasetPublisher().publish(suite_id, run_id, run_root)
+        dataset_name, fiftyone_url, fiftyone_error = FiftyOneDatasetPublisher().publish(
+            suite_id, run_id, run_root
+        )
         label_status = self._label_studio_status(runtime, run_root)
         manifest = ReviewPlatformManifest(
             run_suite_id=suite_id,
@@ -43,13 +45,13 @@ class ReviewJourneyLauncher:
                 status="ready",
                 url=None,
                 path=Path(tracking["dvc"]["path"]),
-                message="DVCLive metrics directory",
+                message=tracking["dvc"].get("message") or "DVCLive metrics directory",
             ),
             evidently=ReviewPlatformStatus(
-                status="ready",
+                status="ready" if tracking["evidently"].get("status") == "exported" else "degraded",
                 url=f"http://localhost:{runtime.workbench_port}/artifacts/{suite_id}/{run_id}/report/evidently.html",
                 path=Path(tracking["evidently"]["path"]),
-                message="Evidently report",
+                message=tracking["evidently"].get("error") or "Evidently report",
             ),
             fiftyone=ReviewPlatformStatus(
                 status="ready" if fiftyone_url else "path_only",
@@ -57,7 +59,7 @@ class ReviewJourneyLauncher:
                 path=run_root / "review" / "fiftyone-dataset.json",
                 message="FiftyOne dataset published"
                 if fiftyone_url
-                else "FiftyOne dataset manifest only",
+                else f"FiftyOne dataset manifest only: {fiftyone_error}",
             ),
             label_studio=label_status,
             fiftyone_dataset=dataset_name,
@@ -76,9 +78,10 @@ class ReviewJourneyLauncher:
                     runtime.label_studio_url,
                     runtime.label_studio_token,
                 )
+                public_url = runtime.label_studio_public_url or runtime.label_studio_url
                 return ReviewPlatformStatus(
                     status="ready",
-                    url=f"{runtime.label_studio_url.rstrip('/')}/projects/{project_id}",
+                    url=f"{public_url.rstrip('/')}/projects/{project_id}",
                     path=tasks_path,
                     message="Label Studio project created",
                     project_id=project_id,

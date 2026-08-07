@@ -22,6 +22,10 @@ services:
       HANDDETECT_MAX_RUNTIME_BYTES: "${HANDDETECT_MAX_RUNTIME_BYTES:-21474836480}"
       HANDDETECT_MIN_FREE_BYTES: "${HANDDETECT_MIN_FREE_BYTES:-5368709120}"
       HANDDETECT_KEEP_SUITES: "${HANDDETECT_KEEP_SUITES:-5}"
+      HANDDETECT_LABEL_STUDIO_URL: "http://label-studio:8080"
+      HANDDETECT_LABEL_STUDIO_PUBLIC_URL: "http://localhost:8080"
+      HANDDETECT_LABEL_STUDIO_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
+      FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:27017/fiftyone"
       GIT_PYTHON_REFRESH: "quiet"
     ports:
       - "8000:8000"
@@ -30,6 +34,9 @@ services:
       - ./data:/workspace/data:ro
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace
+    depends_on:
+      - fiftyone-mongo
+      - label-studio
 
   mlflow:
     image: handdetect-app:local
@@ -52,3 +59,22 @@ services:
     volumes:
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace
+
+  fiftyone-mongo:
+    image: mongo:7.0.15
+    command: ["mongod", "--quiet", "--dbpath", "/data/db"]
+    volumes:
+      - /tmp/handdetect/fiftyone-mongo:/data/db
+
+  label-studio:
+    image: heartexlabs/label-studio:1.21.0
+    environment:
+      LABEL_STUDIO_USERNAME: "${LABEL_STUDIO_USERNAME:-handdetect@example.local}"
+      LABEL_STUDIO_PASSWORD: "${LABEL_STUDIO_PASSWORD:-handdetect-local}"
+      LABEL_STUDIO_USER_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
+      LABEL_STUDIO_BASE_DATA_DIR: "/label-studio/data"
+      LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - /tmp/handdetect/label-studio:/label-studio/data

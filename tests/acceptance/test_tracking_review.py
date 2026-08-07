@@ -41,6 +41,8 @@ def test_tracking_exports_and_review_manifest_are_available() -> None:
     tracking = json.loads((run_root / "tracking_export_status.json").read_text(encoding="utf-8"))
     assert tracking["mlflow"]["status"] == "exported"
     assert tracking["dvc"]["status"] == "exported"
+    assert tracking["dvc"]["mode"] == "dvclive_metrics_only"
+    assert tracking["dvc"]["restore_authority"] is False
     assert tracking["evidently"]["status"] == "exported"
     evidently_path = Path(tracking["evidently"]["path"])
     assert evidently_path.exists()
@@ -66,8 +68,15 @@ def test_tracking_exports_and_review_manifest_are_available() -> None:
     manifest = json.loads((run_root / "review" / "platforms.json").read_text(encoding="utf-8"))
     assert manifest["fiftyone"]["status"] in {"ready", "path_only"}
     assert manifest["label_studio"]["status"] in {"ready", "import_file"}
+    assert "DVCLive metrics only" in manifest["dvc"]["message"]
+    label_tasks = json.loads((run_root / "review" / "labelstudio-tasks.json").read_text())
+    assert label_tasks[0]["predictions"][0]["result"]
     report_html = (run_root / "report" / "index.html").read_text(encoding="utf-8")
     assert "Platform manifest: <code>review/platforms.json</code> (available)." in report_html
+    assert (
+        "DVCLive metrics only; restore authority remains content-hash snapshot replay."
+        in report_html
+    )
     assert "not yet generated" not in report_html
     assert "http://localhost:5000" in report_html
     history = pq.read_table(runs_root() / "index" / "metric_history.parquet").to_pydict()
@@ -100,6 +109,7 @@ def test_lineage_replay_publishes_review_platform_manifest() -> None:
     platforms = json.loads((child_root / "review" / "platforms.json").read_text(encoding="utf-8"))
     assert platforms["mlflow"]["status"] == "ready"
     assert platforms["dvc"]["status"] == "ready"
+    assert "DVCLive metrics only" in platforms["dvc"]["message"]
     assert platforms["evidently"]["status"] == "ready"
     assert platforms["fiftyone"]["status"] in {"ready", "path_only"}
     assert platforms["label_studio"]["status"] in {"ready", "import_file"}
@@ -110,6 +120,7 @@ def test_lineage_replay_publishes_review_platform_manifest() -> None:
         (child_root / "lineage" / "replay.lock.json").read_text(encoding="utf-8")
     )
     assert child_lock["parent"] == {"run_suite_id": suite_id, "run_id": run_id}
+    assert child_lock["restore_authority"] == "content_snapshot"
 
 
 def test_review_launcher_falls_back_when_fiftyone_runtime_breaks(monkeypatch, tmp_path) -> None:
@@ -273,7 +284,7 @@ def test_fiftyone_publish_handles_decisions_without_frame_column(monkeypatch, tm
     fake_fiftyone = _fake_fiftyone_module()
     monkeypatch.setitem(sys.modules, "fiftyone", fake_fiftyone)
 
-    dataset_name, url = FiftyOneDatasetPublisher().publish(
+    dataset_name, url, error = FiftyOneDatasetPublisher().publish(
         RunSuiteId("suite-a"),
         RunId("run-a"),
         run_root,
@@ -281,6 +292,7 @@ def test_fiftyone_publish_handles_decisions_without_frame_column(monkeypatch, tm
 
     assert dataset_name == "handdetect_suite-a_run-a"
     assert url == "http://localhost:5151"
+    assert error is None
     dataset = fake_fiftyone._datasets[dataset_name]
     assert len(dataset.samples) == 1
     assert len(dataset.samples[0]["cleaned"].detections) == 1

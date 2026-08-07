@@ -8,6 +8,7 @@ evidently_root = "/tmp/handdetect/evidently"
 workbench_host = "127.0.0.1"
 workbench_port = 8000
 label_studio_url = ""
+label_studio_public_url = ""
 label_studio_token = ""
 
 [[experiments]]

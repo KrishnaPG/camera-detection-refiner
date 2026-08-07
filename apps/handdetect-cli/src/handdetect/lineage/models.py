@@ -41,6 +41,7 @@ class ReplayLock(BaseModel):
 
     run_suite_id: str
     run_id: str
+    restore_authority: str = "content_snapshot"
     git: GitLineageRef
     dataset: ArtifactLineageRef
     labels: ArtifactLineageRef

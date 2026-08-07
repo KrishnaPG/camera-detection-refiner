@@ -116,7 +116,13 @@ def create_app() -> FastAPI:
 
     @app.get("/artifacts/{suite_id}/{run_id}/{artifact_path:path}")
     def artifact(suite_id: str, run_id: str, artifact_path: str) -> FileResponse:
-        target = runs_root() / suite_id / run_id / artifact_path
+        run_root = (runs_root() / suite_id / run_id).resolve()
+        target = (run_root / artifact_path).resolve()
+        if not target.is_relative_to(run_root):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Artifact not found for {suite_id}/{run_id}: {artifact_path}",
+            )
         if not target.exists() or not target.is_file():
             raise HTTPException(
                 status_code=404,
