@@ -11,7 +11,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from handdetect.lineage.replay import LineageReplayService
-from handdetect.runtime_paths import workbench_job_root
+from handdetect.runtime_paths import runs_root, workbench_job_root
 
 
 def create_app() -> FastAPI:
@@ -21,7 +21,8 @@ def create_app() -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> HTMLResponse:
         runs = []
-        for suite_dir in sorted(Path("runs").glob("suite-*")):
+        current_runs_root = runs_root()
+        for suite_dir in sorted(current_runs_root.glob("suite-*")):
             for run_dir in sorted(suite_dir.iterdir()):
                 if not run_dir.is_dir():
                     continue
@@ -63,7 +64,7 @@ def create_app() -> FastAPI:
         is_complete = exit_path.exists()
         exit_code = int(exit_path.read_text(encoding="utf-8")) if is_complete else None
         can_open_run = bool(
-            exit_code == 0 and suite_id and run_id and (Path("runs") / suite_id / run_id).exists()
+            exit_code == 0 and suite_id and run_id and (runs_root() / suite_id / run_id).exists()
         )
         return templates.TemplateResponse(
             request,
@@ -82,7 +83,7 @@ def create_app() -> FastAPI:
 
     @app.get("/runs/{suite_id}/{run_id}", response_class=HTMLResponse)
     def run_detail(request: Request, suite_id: str, run_id: str) -> HTMLResponse:
-        run_root = Path("runs") / suite_id / run_id
+        run_root = runs_root() / suite_id / run_id
         manifest = json.loads((run_root / "run-manifest.json").read_text(encoding="utf-8"))
         evaluation = json.loads((run_root / "evaluation.json").read_text(encoding="utf-8"))
         regression = json.loads((run_root / "regression.json").read_text(encoding="utf-8"))
@@ -115,7 +116,7 @@ def create_app() -> FastAPI:
 
     @app.get("/artifacts/{suite_id}/{run_id}/{artifact_path:path}")
     def artifact(suite_id: str, run_id: str, artifact_path: str) -> FileResponse:
-        target = Path("runs") / suite_id / run_id / artifact_path
+        target = runs_root() / suite_id / run_id / artifact_path
         return FileResponse(target)
 
     return app

@@ -46,7 +46,12 @@ class FiftyOneDatasetPublisher:
         clip_id = str(sample["clip_id"])
         frame_index = int(sample["frame"])
         detections = self._load_detections(run_root, clip_id, frame_index)
-        decisions = self._load_decisions(run_root, clip_id, frame_index)
+        decisions = self._load_decisions(
+            run_root,
+            clip_id,
+            frame_index,
+            {str(row["detection_id"]) for row in detections},
+        )
         decision_by_id = {item["detection_id"]: item for item in decisions}
         result = fo.Sample(filepath=str(image_path))
         result["clip_id"] = clip_id
@@ -105,11 +110,26 @@ class FiftyOneDatasetPublisher:
         run_root: Path,
         clip_id: str,
         frame_index: int,
+        detection_ids: set[str],
     ) -> list[dict[str, Any]]:
         table = pq.read_table(run_root / "tables" / f"decisions_{clip_id}.parquet")
         rows = table.to_pylist()
+        if table.column_names.__contains__("frame"):
+            return [
+                row
+                for row in rows
+                if row["clip_id"] == clip_id and int(row["frame"]) == frame_index
+            ]
+        if table.column_names.__contains__("frame_index"):
+            return [
+                row
+                for row in rows
+                if row["clip_id"] == clip_id and int(row["frame_index"]) == frame_index
+            ]
         return [
-            row for row in rows if row["clip_id"] == clip_id and int(row["frame"]) == frame_index
+            row
+            for row in rows
+            if row["clip_id"] == clip_id and str(row["detection_id"]) in detection_ids
         ]
 
     def _to_label(self, fo: Any, row: dict[str, Any], width: int, height: int) -> Any:

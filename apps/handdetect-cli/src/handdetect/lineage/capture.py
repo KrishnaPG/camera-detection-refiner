@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -60,15 +61,25 @@ class LineageSnapshotWriter:
             parent=parent,
         )
         output = run_root / "lineage" / "replay.lock.json"
-        self._write_source_snapshot(run_root / "lineage" / "source-snapshot")
+        self._write_source_snapshot(
+            run_root / "lineage" / "source-snapshot",
+            label_set_path,
+            config_path,
+        )
         output.write_text(lock.model_dump_json(indent=2), encoding="utf-8")
         return output
 
     def _git_commit(self) -> str:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        try:
+            return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return os.environ.get("HANDDETECT_BUILD_COMMIT", "unknown")
 
     def _write_dirty_patch(self, output: Path) -> str | None:
-        patch = subprocess.check_output(["git", "diff", "HEAD"], text=True)
+        try:
+            patch = subprocess.check_output(["git", "diff", "HEAD"], text=True)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return None
         if not patch.strip():
             return None
         output.write_text(patch, encoding="utf-8")
@@ -84,13 +95,44 @@ class LineageSnapshotWriter:
             hasher.update(path.read_bytes())
         return hasher.hexdigest()
 
-    def _write_source_snapshot(self, snapshot_root: Path) -> None:
+    def _write_source_snapshot(
+        self,
+        snapshot_root: Path,
+        label_set_path: Path,
+        config_path: Path,
+    ) -> None:
         snapshot_root.mkdir(parents=True, exist_ok=True)
         for name in ["apps", "packages", "handdetect", "configs", "labels"]:
             source = Path(name)
+            if not source.exists():
+                continue
             target = snapshot_root / name
             if target.exists():
                 shutil.rmtree(target)
             shutil.copytree(source, target)
+        self._copy_input_path(label_set_path, snapshot_root)
+        self._copy_input_path(config_path, snapshot_root)
         for name in ["pyproject.toml", "Makefile", "README.md"]:
             shutil.copy2(Path(name), snapshot_root / name)
+
+    def _copy_input_path(self, source: Path, snapshot_root: Path) -> None:
+        if not source.exists():
+            return
+        if source.is_absolute():
+            try:
+                relative_source = source.relative_to(Path.cwd())
+            except ValueError:
+                relative_source = Path(source.name)
+        else:
+            relative_source = source
+        target = snapshot_root / relative_source
+        if target.exists():
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        if source.is_dir():
+            shutil.copytree(source, target)
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)

@@ -23,6 +23,7 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
     run_root = tmp_path / "runs" / suite_id / run_id
     review_root = run_root / "review"
     review_root.mkdir(parents=True)
+    monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(tmp_path / "runs"))
     monkeypatch.chdir(tmp_path)
 
     (run_root / "run-manifest.json").write_text(

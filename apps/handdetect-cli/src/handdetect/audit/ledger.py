@@ -14,6 +14,7 @@ from handdetect.filters.results import (
     GeometricStageResult,
     SelectedDetectionBlock,
     TemporalStageResult,
+    TrackBlock,
 )
 from handdetect.filters.temporal import (
     REASON_CODE_DISPLACEMENT,
@@ -29,13 +30,18 @@ class DecisionLedgerBuilder:
         run_id: RunId,
         block: DetectionBlock,
         geometric: GeometricStageResult,
+        tracks: TrackBlock,
         temporal: TemporalStageResult,
         selected: SelectedDetectionBlock,
     ) -> tuple[DetectionDecisionRecord, ...]:
         records: list[DetectionDecisionRecord] = []
         keep_by_source = selected.selected_mask
-        temporal_reason_by_source = self._temporal_reason_by_source(
-            block.detection_count, temporal, selected
+        temporal_reason_by_source, tracked_by_source, track_id_by_source = (
+            self._track_context_by_source(
+                block.detection_count,
+                tracks,
+                temporal,
+            )
         )
 
         for index, detection_id in enumerate(block.detection_ids):
@@ -58,10 +64,17 @@ class DecisionLedgerBuilder:
                         reason_code,
                         temporal_reason_by_source[index],
                     )
+                    if (
+                        reason is None
+                        and reason_code == 0
+                        and temporal_reason_by_source[index] == 0
+                        and tracked_by_source[index]
+                    ):
+                        reason = RejectReason.OVER_MAX_HANDS
                     stage = _stage_from_reason(reason_code, reason)
 
             merged = int(geometric.merged_into_index[index])
-            track_id = int(selected.track_id[index])
+            track_id = int(track_id_by_source[index])
             records.append(
                 DetectionDecisionRecord(
                     run_id=run_id,
@@ -79,19 +92,22 @@ class DecisionLedgerBuilder:
 
         return tuple(records)
 
-    def _temporal_reason_by_source(
+    def _track_context_by_source(
         self,
         detection_count: int,
+        tracks: TrackBlock,
         temporal: TemporalStageResult,
-        selected: SelectedDetectionBlock,
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         reason_by_source = np.zeros(detection_count, dtype=np.int32)
-        tracked_sources = np.flatnonzero(selected.track_id >= 0)
-        for position, source_index in enumerate(tracked_sources.tolist()):
+        tracked_by_source = np.zeros(detection_count, dtype=np.bool_)
+        track_id_by_source = np.full(detection_count, -1, dtype=np.int32)
+        for position, source_index in enumerate(tracks.source_detection_index.tolist()):
             if position >= temporal.reject_reason_code.size:
                 break
             reason_by_source[source_index] = int(temporal.reject_reason_code[position])
-        return reason_by_source
+            tracked_by_source[source_index] = True
+            track_id_by_source[source_index] = int(tracks.track_id[position])
+        return reason_by_source, tracked_by_source, track_id_by_source
 
 
 def _reason_from_temporal_or_geometric(

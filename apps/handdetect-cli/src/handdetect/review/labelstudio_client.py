@@ -13,6 +13,10 @@ class LabelStudioPublisher:
         url: str,
         token: str,
     ) -> tuple[int, int]:
+        existing = run_root / "review" / "labelstudio-import.json"
+        if existing.exists():
+            payload = json.loads(existing.read_text(encoding="utf-8"))
+            return int(payload["project_id"]), int(payload.get("imported_task_count", 0))
         tasks_path = run_root / "review" / "labelstudio-tasks.json"
         tasks = json.loads(tasks_path.read_text(encoding="utf-8"))
         client = Client(url=url, api_key=token)
@@ -27,8 +31,7 @@ class LabelStudioPublisher:
         )
         imported = project.import_tasks(tasks)
         import_count = len(imported) if isinstance(imported, list) else len(tasks)
-        output = run_root / "review" / "labelstudio-import.json"
-        output.write_text(
+        existing.write_text(
             json.dumps(
                 {
                     "project_id": project.id,

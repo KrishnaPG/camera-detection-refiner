@@ -21,7 +21,7 @@ from handdetect.review_journey.launcher import ReviewJourneyLauncher
 from handdetect.runs.ids import RunSuiteIdProvider
 from handdetect.runs.manifest import SeedManifest
 from handdetect.runs.store import SeedManifestWriter
-from handdetect.runtime_paths import dvclive_root, mlflow_root, runtime_state_root
+from handdetect.runtime_paths import dvclive_root, mlflow_root, runs_root, runtime_state_root
 from handdetect.workbench.server import serve
 from handdetect_domain.config import RuntimeConfig
 
@@ -41,13 +41,16 @@ ReplayOverrideOption = Annotated[list[str] | None, typer.Option("--set")]
 @app.command()
 def doctor() -> None:
     data_root = Path("data")
-    runs_root = Path("runs")
+    current_runs_root = runs_root()
     clip_count = len(DatasetScanner().scan(data_root))
-    typer.echo(f"handdetect doctor data_root={data_root} runs_root={runs_root} clips={clip_count}")
+    typer.echo(
+        f"handdetect doctor data_root={data_root} runs_root={current_runs_root} clips={clip_count}"
+    )
 
 
 @app.command()
-def seed(data_root: Path = Path("data"), out: Path = Path("runs/seed/seed-manifest.json")) -> None:
+def seed(data_root: Path = Path("data"), out: Path | None = None) -> None:
+    output = out or runs_root() / "seed" / "seed-manifest.json"
     clips = DatasetScanner().scan(data_root)
     manifest = SeedManifest(
         dataset_root=data_root,
@@ -55,8 +58,8 @@ def seed(data_root: Path = Path("data"), out: Path = Path("runs/seed/seed-manife
         clip_count=len(clips),
         smoke_clip_ids=tuple(clip.clip_id for clip in clips[:3]),
     )
-    SeedManifestWriter().write(manifest, out)
-    typer.echo(f"seed_manifest={out}")
+    SeedManifestWriter().write(manifest, output)
+    typer.echo(f"seed_manifest={output}")
 
 
 @app.command()
@@ -104,11 +107,12 @@ def migrate() -> None:
 
 
 @app.command()
-def clean(runs_root: Path = Path("runs")) -> None:
-    for target in [runs_root, dvclive_root(), runtime_state_root()]:
+def clean(runs_root_path: Path | None = None) -> None:
+    target_runs_root = runs_root_path or runs_root()
+    for target in [target_runs_root, dvclive_root(), runtime_state_root()]:
         if target.exists():
             shutil.rmtree(target)
-    typer.echo(f"cleaned={runs_root}")
+    typer.echo(f"cleaned={target_runs_root}")
 
 
 @review_app.command("open")
@@ -116,7 +120,7 @@ def review_open(
     suite_id: str = typer.Option(..., "--suite-id"),
     run_id: str = typer.Option(..., "--run-id"),
 ) -> None:
-    run_root = Path("runs") / suite_id / run_id
+    run_root = runs_root() / suite_id / run_id
     config_path = Path(run_root / "run-manifest.json")
     manifest = json.loads(config_path.read_text(encoding="utf-8"))
     runtime = ExperimentConfigParser().parse_path(Path(manifest["config_path"])).runtime

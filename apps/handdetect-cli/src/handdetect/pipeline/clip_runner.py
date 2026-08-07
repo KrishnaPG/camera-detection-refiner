@@ -32,7 +32,9 @@ class ClipRunner:
         tracks = ByteTrackAssociationAdapter().associate(block, geometric, experiment.bytetrack)
         temporal = TemporalFilterPipeline().run(block, tracks, experiment.adapter)
         selected = MaxTwoSelector().select(block, tracks, temporal)
-        decisions = DecisionLedgerBuilder().build(run_id, block, geometric, temporal, selected)
+        decisions = DecisionLedgerBuilder().build(
+            run_id, block, geometric, tracks, temporal, selected
+        )
         clip_summary = self._write_artifacts(
             paths, run_id, block, tracks, temporal, selected, decisions, store
         )
@@ -142,6 +144,7 @@ class ClipRunner:
             {
                 "clip_id": [str(record.clip_id) for record in decisions],
                 "detection_id": [str(record.detection_id) for record in decisions],
+                "frame": [int(record.frame) for record in decisions],
                 "decision": [record.decision.value for record in decisions],
                 "stage": [record.stage.value for record in decisions],
                 "reason": [

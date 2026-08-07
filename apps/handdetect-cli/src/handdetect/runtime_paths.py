@@ -12,6 +12,13 @@ def runtime_state_root() -> Path:
     return Path(tempfile.gettempdir()) / "handdetect"
 
 
+def runs_root() -> Path:
+    configured_root = os.environ.get("HANDDETECT_RUNS_ROOT")
+    if configured_root:
+        return Path(configured_root)
+    return runtime_state_root() / "runs"
+
+
 def workbench_job_root() -> Path:
     return runtime_state_root() / "workbench" / "jobs"
 
