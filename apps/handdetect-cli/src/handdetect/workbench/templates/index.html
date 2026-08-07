@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>HandDetect Workbench</title>
+  </head>
+  <body>
+    <h1>HandDetect Workbench</h1>
+    <p>Workbench: <a href="http://localhost:8000">http://localhost:8000</a></p>
+    <p>MLflow: <a href="http://localhost:5000">http://localhost:5000</a></p>
+    <p>FiftyOne: <a href="http://localhost:5151">http://localhost:5151</a></p>
+    <p>Label Studio: <a href="http://localhost:8080">http://localhost:8080</a></p>
+    <form method="post" action="/run-smoke">
+      <button type="submit">Run Smoke Experiment</button>
+    </form>
+    <h2>Runs</h2>
+    <ul>
+      {% for run in runs %}
+      <li>
+        <a href="/runs/{{ run.run_suite_id }}/{{ run.run_id }}">
+          {{ run.run_suite_id }}/{{ run.run_id }}
+        </a>
+      </li>
+      {% else %}
+      <li>No runs yet.</li>
+      {% endfor %}
+    </ul>
+  </body>
+</html>

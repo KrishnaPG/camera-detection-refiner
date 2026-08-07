@@ -4,6 +4,12 @@
 > owners from the original module sketch; implement reusable code in `packages/*` and app wiring
 > in `apps/handdetect-cli` according to the normative path map.
 
+> **2026-08-07 BioDock amendment:** This task's original static-report snippets are no longer
+> sufficient for Phase 1. Implementers must follow the README's `BioDock Story Page Normative
+> Amendment`: produce `review/story.json`, clip timeline/event/track/chapter artifacts,
+> synchronized overlay videos, `review/platforms.json`, and the `handdetect-quality-adapter`
+> Generator Package bridge. Static HTML remains a fallback hub only.
+
 **Files:**
 - Create: `src/handdetect/report/static_report.py`
 - Create: `src/handdetect/report/sampling.py`

@@ -1,0 +1,16 @@
+.git
+.gitignore
+/.handdetect
+/.pytest_cache
+/.ruff_cache
+/.superpowers
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+/docs
+/dvclive
+/mlruns
+/runs
+/tests
+/.dvc/cache

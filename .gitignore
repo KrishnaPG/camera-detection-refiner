@@ -1,1 +1,12 @@
-data
+/data
+/runs
+/mlruns
+
+.agents
+.codex
+/.dvc
+/.handdetect
+/.pytest_cache
+/.superpowers
+
+__pycache__

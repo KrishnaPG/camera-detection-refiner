@@ -4,6 +4,12 @@
 > owners from the original module sketch; implement reusable code in `packages/*` and app wiring
 > in `apps/handdetect-cli` according to the normative path map.
 
+> **2026-08-07 BioDock amendment:** One-button replay must be available from the BioDock
+> Story Review page as the preferred UX. The local FastAPI workbench remains a fallback
+> orchestration surface. Replayed child runs must regenerate BioDock story artifacts,
+> `review/platforms.json`, Rerun recording links, FiftyOne views, Label Studio/CVAT handoff
+> links, Datumaro/Evidently links when available, and exact MLflow/DVC lineage links.
+
 **Files:**
 - Create: `dvc.yaml`
 - Create: `params.yaml`

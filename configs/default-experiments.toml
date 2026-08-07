@@ -1,0 +1,54 @@
+[runtime]
+data_root = "data"
+runs_root = "/tmp/handdetect/runs"
+max_clip_workers = 1
+mlflow_tracking_uri = "/tmp/handdetect/mlruns"
+dvclive_root = "/tmp/handdetect/dvclive"
+evidently_root = "/tmp/handdetect/evidently"
+workbench_host = "127.0.0.1"
+workbench_port = 8000
+label_studio_url = ""
+label_studio_public_url = ""
+label_studio_token = ""
+
+[[experiments]]
+name = "baseline"
+enabled_filters = ["geometric", "tracking", "temporal", "max_two"]
+
+[experiments.adapter]
+duplicate_iou_threshold = 0.65
+min_box_area_px = 2500.0
+max_box_area_px = 450000.0
+min_aspect_ratio = 0.2
+max_aspect_ratio = 4.5
+max_center_speed_px_per_s = 4200.0
+min_track_length_frames = 2
+static_camera_motion_px = 0.5
+static_box_motion_px = 1.5
+
+[experiments.bytetrack]
+track_activation_threshold = 0.2
+minimum_matching_threshold = 0.1
+lost_track_buffer = 30
+frame_rate = 30
+
+[[experiments]]
+name = "strict_speed"
+enabled_filters = ["geometric", "tracking", "temporal", "max_two"]
+
+[experiments.adapter]
+duplicate_iou_threshold = 0.65
+min_box_area_px = 2500.0
+max_box_area_px = 450000.0
+min_aspect_ratio = 0.2
+max_aspect_ratio = 4.5
+max_center_speed_px_per_s = 3400.0
+min_track_length_frames = 3
+static_camera_motion_px = 0.5
+static_box_motion_px = 1.5
+
+[experiments.bytetrack]
+track_activation_threshold = 0.2
+minimum_matching_threshold = 0.1
+lost_track_buffer = 30
+frame_rate = 30

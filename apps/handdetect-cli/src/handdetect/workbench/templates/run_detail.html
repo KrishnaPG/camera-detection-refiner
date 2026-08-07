@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ suite_id }}/{{ run_id }}</title>
+  </head>
+  <body>
+    <h1>{{ suite_id }}/{{ run_id }}</h1>
+    <p><a href="/">Back to runs</a></p>
+    <h2>Primary Links</h2>
+    <ul>
+      {% if platforms %}
+      <li><a href="{{ platforms.report.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/index.html') }}">Static report</a></li>
+      <li><a href="{{ platforms.mlflow.url or 'http://localhost:5000' }}">MLflow UI</a></li>
+      <li><a href="{{ platforms.evidently.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/evidently.html') }}">Evidently report</a></li>
+      <li><a href="{{ platforms.fiftyone.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/fiftyone-dataset.json') }}">FiftyOne</a></li>
+      <li><a href="{{ platforms.label_studio.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/labelstudio-tasks.json') }}">Label Studio</a></li>
+      {% else %}
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/index.html">Static report</a></li>
+      <li><a href="http://localhost:5000">MLflow UI</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/evidently.html">Evidently report</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/fiftyone-dataset.json">FiftyOne dataset manifest</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/labelstudio-tasks.json">Label Studio tasks</a></li>
+      {% endif %}
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/lineage/replay.lock.json">Replay lock</a></li>
+    </ul>
+    <form method="post" action="/runs/{{ suite_id }}/{{ run_id }}/review/open">
+      <button type="submit">Open Review Platforms</button>
+    </form>
+    <h2>Metrics</h2>
+    <pre>{{ evaluation | tojson(indent=2) }}</pre>
+    <pre>{{ regression | tojson(indent=2) }}</pre>
+    <pre>{{ tracking | tojson(indent=2) }}</pre>
+    {% if platforms %}
+    <h2>Platforms</h2>
+    <ul>
+      <li>MLflow: {{ platforms.mlflow.status }} {% if platforms.mlflow.url %}<a href="{{ platforms.mlflow.url }}">{{ platforms.mlflow.url }}</a>{% endif %}</li>
+      <li>DVC: {{ platforms.dvc.status }} {{ platforms.dvc.path }}</li>
+      <li>Evidently: {{ platforms.evidently.status }} {% if platforms.evidently.url %}<a href="{{ platforms.evidently.url }}">{{ platforms.evidently.url }}</a>{% endif %}</li>
+      <li>FiftyOne: {{ platforms.fiftyone.status }} {% if platforms.fiftyone.url %}<a href="{{ platforms.fiftyone.url }}">{{ platforms.fiftyone.url }}</a>{% endif %}</li>
+      <li>Label Studio: {{ platforms.label_studio.status }} {% if platforms.label_studio.url %}<a href="{{ platforms.label_studio.url }}">{{ platforms.label_studio.url }}</a>{% endif %}</li>
+    </ul>
+    <pre>{{ platforms | tojson(indent=2) }}</pre>
+    {% endif %}
+    <h2>Replay</h2>
+    <form method="post" action="/runs/{{ suite_id }}/{{ run_id }}/replay">
+      <label for="override">Override</label>
+      <input id="override" name="override" value="adapter.max_center_speed_px_per_s=3900.0" />
+      <button type="submit">Replay With Override</button>
+    </form>
+  </body>
+</html>

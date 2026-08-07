@@ -1,0 +1,198 @@
+services:
+  workbench:
+    image: handdetect-app:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        HANDDETECT_BUILD_COMMIT: "${HANDDETECT_BUILD_COMMIT:-local-image}"
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/runs /tmp/handdetect/evidently /tmp/handdetect/workbench /tmp/handdetect/replays
+        chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
+          /tmp/handdetect/home \
+          /tmp/handdetect/cache \
+          /tmp/handdetect/mlruns \
+          /tmp/handdetect/dvclive \
+          /tmp/handdetect/runs \
+          /tmp/handdetect/evidently \
+          /tmp/handdetect/workbench \
+          /tmp/handdetect/replays
+        export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
+        exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
+          python -m handdetect.cli.main workbench serve --host 0.0.0.0 --port 8000
+    environment:
+      HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
+      HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+      HANDDETECT_RUNS_ROOT: "/tmp/handdetect/runs"
+      HANDDETECT_MAX_RUNTIME_BYTES: "${HANDDETECT_MAX_RUNTIME_BYTES:-21474836480}"
+      HANDDETECT_MIN_FREE_BYTES: "${HANDDETECT_MIN_FREE_BYTES:-5368709120}"
+      HANDDETECT_KEEP_SUITES: "${HANDDETECT_KEEP_SUITES:-5}"
+      HANDDETECT_SELECTED_DATA_SNAPSHOT_MAX_BYTES: "${HANDDETECT_SELECTED_DATA_SNAPSHOT_MAX_BYTES:-1073741824}"
+      HANDDETECT_LABEL_STUDIO_URL: "http://label-studio:8080"
+      HANDDETECT_LABEL_STUDIO_PUBLIC_URL: "http://localhost:8080"
+      HANDDETECT_LABEL_STUDIO_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
+      HANDDETECT_FIFTYONE_PUBLIC_URL: "http://localhost:5151"
+      FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:27017/fiftyone"
+      GIT_PYTHON_REFRESH: "quiet"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/workspace/data:ro
+      - /tmp/handdetect:/tmp/handdetect
+    working_dir: /workspace
+    depends_on:
+      fiftyone-mongo:
+        condition: service_healthy
+      label-studio:
+        condition: service_started
+
+  mlflow:
+    image: handdetect-app:local
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns
+        chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
+          /tmp/handdetect/home \
+          /tmp/handdetect/cache \
+          /tmp/handdetect/mlruns
+        export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
+        exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
+          mlflow ui --backend-store-uri file:/tmp/handdetect/mlruns --host 0.0.0.0 --port 5000
+    environment:
+      MLFLOW_ALLOW_FILE_STORE: "true"
+      GIT_PYTHON_REFRESH: "quiet"
+      HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
+      HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+    ports:
+      - "5000:5000"
+    volumes:
+      - /tmp/handdetect:/tmp/handdetect
+    working_dir: /workspace
+
+  fiftyone-mongo:
+    image: mongo:7.0.15
+    user: "0:0"
+    command:
+      - sh
+      - -lc
+      - |
+        find /data/db -mindepth 1 -maxdepth 1 -mtime +"$${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}" -exec rm -rf {} +
+        exec mongod --quiet --dbpath /data/db --bind_ip_all
+    environment:
+      HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS: "${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mongosh --quiet --eval 'db.adminCommand("ping").ok' >/dev/null
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 2s
+    volumes:
+      - /tmp/handdetect-services/fiftyone-mongo:/data/db
+
+  fiftyone:
+    image: handdetect-app:local
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache
+        chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
+          /tmp/handdetect/home \
+          /tmp/handdetect/cache
+        export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
+        exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
+          fiftyone app launch --address 0.0.0.0 --port 5151 --remote --wait -1
+    environment:
+      HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
+      HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+      FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:27017/fiftyone"
+    ports:
+      - "5151:5151"
+    volumes:
+      - /tmp/handdetect:/tmp/handdetect
+    working_dir: /workspace
+    depends_on:
+      fiftyone-mongo:
+        condition: service_healthy
+
+  label-studio:
+    image: heartexlabs/label-studio:1.21.0
+    user: "0:0"
+    command:
+      - bash
+      - -lc
+      - |
+        set -o pipefail
+        find /label-studio/data -mindepth 1 -maxdepth 1 -mtime +"$${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}" -exec rm -rf {} +
+
+        start_label_studio() {
+          /label-studio/.venv/bin/label-studio start \
+            --no-browser \
+            --internal-host 0.0.0.0 \
+            --port 8080 \
+            --host http://localhost:8080 \
+            --username "$$LABEL_STUDIO_USERNAME" \
+            --password "$$LABEL_STUDIO_PASSWORD" \
+            --user-token "$$LABEL_STUDIO_USER_TOKEN" \
+            --enable-legacy-api-token 2>&1 | tee /tmp/label-studio-start.log
+          return "$${PIPESTATUS[0]}"
+        }
+
+        enable_legacy_api_tokens_after_start() {
+          for attempt in $$(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8080/; then
+              if printf '%s\n' \
+                'from jwt_auth.models import JWTSettings' \
+                'updated = JWTSettings.objects.update(legacy_api_tokens_enabled=True)' \
+                'print(f"legacy_api_tokens_enabled=true rows={updated}")' \
+                | /label-studio/.venv/bin/label-studio shell >/tmp/label-studio-bootstrap.log 2>&1; then
+                cat /tmp/label-studio-bootstrap.log
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          cat /tmp/label-studio-bootstrap.log || true
+          echo "failed to enable Label Studio legacy API token mode" >&2
+          exit 1
+        }
+
+        for attempt in 1 2; do
+          rm -f /tmp/label-studio-start.log
+          enable_legacy_api_tokens_after_start &
+          bootstrap_pid="$$!"
+          start_label_studio
+          status="$$?"
+          kill "$$bootstrap_pid" 2>/dev/null || true
+
+          if [ "$$attempt" = "1" ] \
+            && grep -Eq "django.db.utils.OperationalError|duplicate column name" /tmp/label-studio-start.log; then
+            echo "resetting generated Label Studio SQLite state after local migration failure" >&2
+            rm -f /label-studio/data/label_studio.sqlite3 /label-studio/data/label_studio.sqlite3-*
+            continue
+          fi
+
+          exit "$$status"
+        done
+    environment:
+      LABEL_STUDIO_USERNAME: "${LABEL_STUDIO_USERNAME:-handdetect@example.local}"
+      LABEL_STUDIO_PASSWORD: "${LABEL_STUDIO_PASSWORD:-handdetect-local}"
+      LABEL_STUDIO_USER_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
+      LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN: "true"
+      LABEL_STUDIO_BASE_DATA_DIR: "/label-studio/data"
+      LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK: "true"
+      HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS: "${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}"
+    ports:
+      - "8080:8080"
+    volumes:
+      - /tmp/handdetect-services/label-studio:/label-studio/data
