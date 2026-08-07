@@ -6,7 +6,7 @@
 
 **Architecture:** The adapter is a library-first pipeline with typed boundary parsers, Arrow/NumPy hot-path buffers, a ByteTrack association adapter, pluggable false-positive filters, immutable run storage, MLflow/DVC/Evidently experiment tracking, and static review outputs. The CLI is the first public entrypoint; batch/API/streaming/edge wrappers must reuse the same `AdapterPipeline.run_clip()` core contract.
 
-**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.5.1`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `opencv-python-headless==5.0.0.93`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==1.20.1`.
+**Tech Stack:** Python 3.12, `trackers==2.6.0` ByteTrack, `supervision==0.30.0`, `numpy==2.5.1`, `pydantic==2.13.4`, `pyarrow==25.0.0`, `polars==1.43.2`, `opencv-python-headless==5.0.0.93`, `typer==0.27.1`, `structlog==26.1.0`, `opentelemetry-sdk==1.44.0`, `prometheus-client==0.26.0`, `mlflow==3.15.1`, `dvc==3.67.1`, `dvclive==3.49.1`, `evidently==0.7.21`, `ruff==0.16.1`, `mypy==2.3.0`, `fiftyone==1.20.1`, `label-studio-sdk==2.1.0`.
 
 ## Global Constraints
 
@@ -19,6 +19,9 @@
 - MLflow tracking is mandatory for experiment parameters, scalar metrics, tags, and artifacts. The default tracking URI is local `mlruns/`; a typed config value may point to a remote MLflow server later.
 - DVC/DVCLive outputs are mandatory for git-friendly metrics and plots under `dvclive/<run_suite_id>/<run_id>/` so regression charts can be compared without reading custom report HTML.
 - Evidently reports are mandatory for evaluation/regression dashboards where label or metric tables exist; static HTML must link to Evidently artifacts instead of reimplementing those charts.
+- FiftyOne is mandatory as the visual comparison workbench: each run must create a real FiftyOne dataset with raw detections, cleaned detections, rejected detections, track ids, stage reasons, and hard-case sample tags.
+- Label Studio is mandatory as the human correction loop: each run must produce importable pre-annotated tasks, and when a configured Label Studio endpoint is available, the review command must create a per-run project, import predictions through `label-studio-sdk==2.1.0`, and reuse the recorded project on repeated opens of the same immutable run.
+- The static HTML report is only a hub. It must link to MLflow, DVC, Evidently, FiftyOne, Label Studio, and local artifact paths; it must not duplicate platform features already provided by those tools.
 - Core logic must not read environment variables, current time, filesystem, network, or random state directly. Public entrypoints create providers and ready handles.
 - Pydantic `model_validate` may appear only in boundary parsers for JSON/config/manifest/label imports.
 - Internal hot-path transfer is typed object -> NumPy view or Arrow table. Do not serialize to dict/JSON between internal modules.
@@ -41,6 +44,7 @@
   - `runs/<run_suite_id>/<run_id>/audit/<clip_id>.jsonl` records every input detection as `kept`, `merged`, or `rejected` with stage, reason, source detection id, destination detection id when merged, track id when available, and provenance.
   - `runs/<run_suite_id>/<run_id>/tables/*.parquet` stores metrics, detections, tracks, and decisions for fast comparison across runs and experiments.
   - `runs/index/run_index.parquet` and `runs/index/metric_history.parquet` append one row per run and per metric so regressions can be queried by `RunSuiteId`, `RunId`, `ExperimentId`, config hash, git commit, dataset hash, label-set id, metric name, and metric value.
+  - `handdetect review open --suite-id <id> --run-id <id>` opens or prints stable local URLs for MLflow comparison, FiftyOne visual review, Label Studio correction, Evidently regression report, DVC plots, and the static report hub.
 - Non-goals:
   - Do not retrain WiLoR, YOLO, or any detector.
   - Do not implement false-negative interpolation.
@@ -67,6 +71,8 @@
 - Run summaries + metrics + overlay samples -> `handdetect.report.static_report.StaticReportBuilder` and `handdetect.review.fiftyone_export.FiftyOneExporter` -> static HTML, CSS, frame contact sheets, optional overlay videos, and FiftyOne dataset export -> output reviewer UX artifacts -> revalidation of artifact manifests before report write -> video decode only in this stage -> bounded frame decoding by sample manifest -> frame copies limited to annotation output images/videos -> error path emits `HDQ_REPORT_FAILED`.
 - `RunManifest` + `EvaluationSummary` + artifact paths -> `handdetect.tracking_platforms.mlflow_tracker.MlflowExperimentTracker` and `handdetect.tracking_platforms.dvc_tracker.DvcLiveTracker` -> logs parameters, metrics, tags, and artifact references to open-source experiment platforms -> output MLflow run id and DVC metrics/plots path -> tracking backend write through ready handle -> no hot-path async -> scalar metric logging only after clip/run aggregation -> error path emits `HDQ_TRACKING_EXPORT_FAILED` and does not delete run artifacts.
 - Current run metrics + baseline manifest + run history index -> `handdetect.regression.gates.RegressionGateRunner` -> compares configured thresholds and records pass/fail -> output `regression.json`, `metric_history.parquet`, Evidently regression report, and CLI exit code -> revalidates persisted current/baseline manifests -> no network unless MLflow tracking URI is remote -> no async -> Polars scans over Parquet, no JSON path -> error path emits `HDQ_REGRESSION_FAILED`.
+- `RunManifest` + cleaned/audit/overlay artifacts -> `handdetect.review.fiftyone_dataset.FiftyOneDatasetPublisher` -> creates or updates a real local FiftyOne dataset named `handdetect_<run_suite_id>_<run_id>` with fields `raw`, `cleaned`, `rejected`, `track_id`, `stage_reason`, and `hard_case_tags` -> output dataset name and optional app URL -> FiftyOne API call through review boundary only -> no adapter hot-path work -> error path emits `HDQ_FIFTYONE_EXPORT_FAILED`.
+- `RunManifest` + sampled frames + predictions -> `handdetect.review.labelstudio_client.LabelStudioPublisher` -> writes Label Studio JSON tasks with `predictions` and, if endpoint/token are configured, creates a per-run Label Studio project and imports those tasks through the SDK; repeated opens reuse `review/labelstudio-import.json` instead of duplicating tasks -> output project id/url or importable JSON path -> external API call only in review bridge -> no adapter hot-path work -> error path emits `HDQ_LABEL_STUDIO_EXPORT_FAILED`.
 
 ## 3. Structure Derived From Flow
 
@@ -84,6 +90,7 @@
   - Experiment engine: `handdetect.experiments.runner` composes config, run store, pipeline, metrics, and regression gates into repeatable experiment suites.
   - Review artifact builder: `handdetect.report` composes persisted tables and sample manifests into HTML/visual outputs.
   - Label/evaluation workbench: `handdetect.eval` composes label imports, IoU matching, stage metrics, and calibration sweeps.
+  - Review journey bridge: `handdetect.review_journey` composes MLflow, DVC, Evidently, FiftyOne, Label Studio, and static report links into one operator-facing command.
 - Final module list:
   - `handdetect.config`: typed runtime and experiment configuration.
   - `handdetect.domain`: Pydantic domain models, branded ids, enums, constants.
@@ -99,6 +106,7 @@
   - `handdetect.experiments`: experiment matrix execution and comparison.
   - `handdetect.eval`: labels, IoU matching, accuracy metrics, calibration sweeps.
   - `handdetect.report`: static HTML, sampled overlays, FiftyOne export.
+  - `handdetect.review_journey`: public review launcher and platform URL/status manifest.
   - `handdetect.regression`: baseline comparison and pass/fail gates.
   - `handdetect.cli`: public Typer commands only.
 - Module ownership rules:
@@ -130,6 +138,7 @@
   - `RunArtifactStore.open(config, clock, id_provider)` returns a ready handle with non-optional root paths.
   - `RunCatalog.open(runs_root)` returns a ready handle for append-only `run_index.parquet` and `metric_history.parquet`; it must acquire a file lock before appending and release it in the same context manager.
   - `ExperimentTrackingSession.open(config)` returns ready MLflow, DVC, and Evidently handles; remote tracking failures are logged and surfaced in `tracking_export_status.json` but must not mutate completed core artifacts.
+  - `ReviewPlatformSession.open(config)` returns ready MLflow UI, FiftyOne App, and optional Label Studio handles; every launched process has an owning context manager and a status file with pid, URL, and cleanup instructions.
   - `DatasetScanner.scan(data_root)` returns `ValidatedClipPathSet` values only after required data path checks pass.
   - `TelemetryHandle.open(config)` returns a ready handle whose exporter failures are non-blocking.
   - Factories use `contextlib.ExitStack` so temp directories and file handles are cleaned by the owner that acquired them.
@@ -160,6 +169,10 @@
   - Rejected custom SQL dashboard; rejected because MLflow/DVC/Evidently already provide mature run tracking, metric comparison, plots, and reports.
   - Hot stage: none. Tracking export runs after aggregation, logs scalar metrics and artifact references, and must not run inside per-frame loops.
   - Copy/serde removed: MLflow and DVCLive receive scalar metrics from `EvaluationSummary`; Evidently reads Arrow/Parquet-derived Pandas/Polars frames only in reporting, not adapter processing.
+- Open-source review platforms:
+  - Selected packages/platforms: FiftyOne App for visual side-by-side sample inspection, Label Studio plus `label-studio-sdk==2.1.0` for correction/label approval, MLflow UI for experiment comparison, DVC plots for git-friendly metric history, Evidently HTML for regression/evaluation reports.
+  - Rejected custom comparison UI; rejected because these tools already own run comparison, visual CV review, pre-annotation correction, and metrics plots.
+  - Hot stage: none. Review platform export happens after run artifacts are complete and reads persisted Arrow/Parquet/JSONL artifacts through typed boundary readers.
 - Schemas and type safety:
   - Selected package: `pydantic==2.13.4`.
   - Rejected raw dict parsing; rejected because domain identity and validation state must be impossible to erase.
@@ -214,3 +227,4 @@
 - [05-evaluation-regression.md](./05-evaluation-regression.md): gold-label import, accuracy metrics, calibration sweeps, regression gates.
 - [06-reporting-review-workbench.md](./06-reporting-review-workbench.md): HTML report, visual overlays/contact sheets, FiftyOne/Label Studio exports, architecture docs.
 - [07-open-source-experiment-tracking.md](./07-open-source-experiment-tracking.md): MLflow, DVC/DVCLive, Evidently, append-only run catalog, cross-run regression query path.
+- [08-seamless-review-journey.md](./08-seamless-review-journey.md): one-command review journey across MLflow, DVC, Evidently, FiftyOne, Label Studio, and the static report hub.

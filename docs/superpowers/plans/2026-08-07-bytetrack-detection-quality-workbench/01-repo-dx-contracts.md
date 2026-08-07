@@ -99,6 +99,7 @@ description = "ByteTrack-backed hand detection quality workbench"
 requires-python = "==3.12.*"
 dependencies = [
   "fiftyone==1.20.1",
+  "label-studio-sdk==2.1.0",
   "mlflow==3.15.1",
   "numpy==2.5.1",
   "opencv-python-headless==5.0.0.93",
