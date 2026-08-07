@@ -4,6 +4,12 @@
 > owners from the original module sketch; implement reusable code in `packages/*` and app wiring
 > in `apps/handdetect-cli` according to the normative path map.
 
+> **2026-08-07 BioDock amendment:** BioDock Berg10 Story Review is now the primary review
+> surface. The review journey must create exact run-scoped BioDock, Rerun, MLflow, DVC,
+> Evidently, FiftyOne, Label Studio, and static fallback links in `review/platforms.json`.
+> Do not use `localhost` or ad-hoc ports in docs, tests, Compose, or user flows; use the
+> committed port registry and the browser target `10.7.0.4`.
+
 **Files:**
 - Create: `src/handdetect/review_journey/models.py`
 - Create: `src/handdetect/review_journey/launcher.py`
@@ -81,10 +87,11 @@ python -m handdetect.cli.main review open --suite-id <suite_id> --run-id <run_id
 
 ```bash
 make review-services-up
-HANDDETECT_LABEL_STUDIO_URL=http://localhost:8080 \
-HANDDETECT_LABEL_STUDIO_TOKEN=<token-from-label-studio-account-page> \
 python -m handdetect.cli.main review open --suite-id <suite_id> --run-id <run_id>
 ```
+
+The service URL and default development token must come from typed runtime discovery and the
+root `README.md`, not from memorized port numbers or hidden Label Studio account pages.
 
 - User then sees:
   - MLflow: run parameters, metrics, tags, artifact links, and cross-run comparisons.
@@ -336,16 +343,16 @@ services:
   label-studio:
     image: heartexlabs/label-studio:1.21.0
     ports:
-      - "8080:8080"
+      - "${HANDDETECT_BIND_HOST}:${HANDDETECT_LABEL_STUDIO_HOST_PORT}:${HANDDETECT_LABEL_STUDIO_CONTAINER_PORT}"
     volumes:
-      - label-studio-data:/label-studio/data
+      - "${HANDDETECT_DATA_ROOT}/label-studio:/label-studio/data"
     environment:
       LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED: "true"
       LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT: "/label-studio/data"
-
-volumes:
-  label-studio-data:
 ```
+
+`HANDDETECT_LABEL_STUDIO_HOST_PORT` and `HANDDETECT_LABEL_STUDIO_CONTAINER_PORT` must be
+generated from the committed port registry. Do not hardcode vendor or host ports in Compose.
 
 Modify `Makefile`:
 
