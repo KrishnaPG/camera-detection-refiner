@@ -36,6 +36,7 @@ def test_dockerfile_uses_build_commit_instead_of_runtime_git() -> None:
     assert "pip wheel --wheel-dir /wheels /build" in dockerfile
     assert "pip install --no-index --find-links=/wheels handdetect-quality" in dockerfile
     assert "pip install -e" not in dockerfile
+    assert "COPY pyproject.toml /workspace/pyproject.toml" in dockerfile
 
 
 def test_default_configs_route_runtime_state_to_tmp() -> None:

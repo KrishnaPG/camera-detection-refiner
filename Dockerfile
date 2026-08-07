@@ -44,6 +44,7 @@ RUN pip install --upgrade pip \
   && pip install --no-index --find-links=/wheels handdetect-quality \
   && rm -rf /wheels
 
+COPY pyproject.toml /workspace/pyproject.toml
 COPY README.md /workspace/README.md
 COPY Makefile /workspace/Makefile
 COPY configs /workspace/configs
