@@ -4,11 +4,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        HANDDETECT_BUILD_COMMIT: "${HANDDETECT_BUILD_COMMIT:-local-image}"
     command:
       - bash
       - -lc
       - |
-        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/workbench
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/runs /tmp/handdetect/evidently /tmp/handdetect/workbench
         chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
         export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
         exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
@@ -16,11 +18,16 @@ services:
     environment:
       HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
       HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+      HANDDETECT_RUNS_ROOT: "/tmp/handdetect/runs"
+      HANDDETECT_MAX_RUNTIME_BYTES: "${HANDDETECT_MAX_RUNTIME_BYTES:-21474836480}"
+      HANDDETECT_MIN_FREE_BYTES: "${HANDDETECT_MIN_FREE_BYTES:-5368709120}"
+      HANDDETECT_KEEP_SUITES: "${HANDDETECT_KEEP_SUITES:-5}"
+      GIT_PYTHON_REFRESH: "quiet"
     ports:
       - "8000:8000"
       - "5151:5151"
     volumes:
-      - .:/workspace
+      - ./data:/workspace/data:ro
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace
 
@@ -37,11 +44,11 @@ services:
           mlflow ui --backend-store-uri file:/tmp/handdetect/mlruns --host 0.0.0.0 --port 5000
     environment:
       MLFLOW_ALLOW_FILE_STORE: "true"
+      GIT_PYTHON_REFRESH: "quiet"
       HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
       HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
     ports:
       - "5000:5000"
     volumes:
-      - .:/workspace
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace

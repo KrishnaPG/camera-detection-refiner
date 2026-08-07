@@ -23,6 +23,7 @@ RUN apt-get update \
 
 COPY pyproject.toml /workspace/pyproject.toml
 COPY README.md /workspace/README.md
+COPY Makefile /workspace/Makefile
 COPY apps /workspace/apps
 COPY packages /workspace/packages
 COPY configs /workspace/configs

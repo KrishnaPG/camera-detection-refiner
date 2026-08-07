@@ -3,6 +3,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+from handdetect.runs.retention import RuntimeRetentionPruner
 from packaging.requirements import Requirement
 from packaging.version import Version
 
@@ -26,10 +27,11 @@ def test_pyproject_declares_label_studio_compatible_opencv_pin() -> None:
     assert not opencv.specifier.contains(Version("5.0.0.93"))
 
 
-def test_dockerfile_installs_git_for_lineage_capture() -> None:
+def test_dockerfile_uses_build_commit_instead_of_runtime_git() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    assert "apt-get install -y --no-install-recommends" in dockerfile
-    assert "\n    git \\\n" in dockerfile or "\n    git\n" in dockerfile
+    assert "ARG HANDDETECT_BUILD_COMMIT" in dockerfile
+    assert "HANDDETECT_BUILD_COMMIT=${HANDDETECT_BUILD_COMMIT}" in dockerfile
+    assert "\n    git \\\n" not in dockerfile
 
 
 def test_default_configs_route_runtime_state_to_tmp() -> None:
@@ -38,8 +40,10 @@ def test_default_configs_route_runtime_state_to_tmp() -> None:
         ROOT / "configs" / "smoke-experiment.toml",
     ]:
         runtime = tomllib.loads(path.read_text(encoding="utf-8"))["runtime"]
+        assert runtime["runs_root"] == "/tmp/handdetect/runs"
         assert runtime["mlflow_tracking_uri"] == "/tmp/handdetect/mlruns"
         assert runtime["dvclive_root"] == "/tmp/handdetect/dvclive"
+        assert runtime["evidently_root"] == "/tmp/handdetect/evidently"
 
 
 def test_repo_does_not_depend_on_root_sitecustomize_hack() -> None:
@@ -58,6 +62,58 @@ def test_compose_shares_tmp_runtime_state_across_services() -> None:
     assert "- /tmp/handdetect:/tmp/handdetect" in compose
 
 
+def test_default_compose_does_not_source_mount_repo() -> None:
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "- .:/workspace" not in compose
+    assert "./data:/workspace/data:ro" in compose
+
+
+def test_runtime_retention_prunes_old_generated_suites(tmp_path: Path) -> None:
+    runs_root = tmp_path / "runs"
+    old_suite = runs_root / "suite-old"
+    protected_suite = runs_root / "suite-current"
+    old_suite.mkdir(parents=True)
+    protected_suite.mkdir(parents=True)
+    (old_suite / "blob.bin").write_bytes(b"x" * 64)
+    (protected_suite / "blob.bin").write_bytes(b"x" * 64)
+
+    result = RuntimeRetentionPruner(
+        max_bytes=1,
+        min_free_bytes=0,
+        keep_suites=1,
+    ).prune(runs_root, protect=(protected_suite,))
+
+    assert old_suite in result.removed_paths
+    assert not old_suite.exists()
+    assert protected_suite.exists()
+
+
+def test_runtime_retention_keep_suites_counts_protected_suite(tmp_path: Path) -> None:
+    runs_root = tmp_path / "runs"
+    oldest_suite = runs_root / "suite-001"
+    newer_suite = runs_root / "suite-002"
+    protected_suite = runs_root / "suite-003"
+    for suite in (oldest_suite, newer_suite, protected_suite):
+        suite.mkdir(parents=True)
+
+    result = RuntimeRetentionPruner(
+        max_bytes=1024 * 1024,
+        min_free_bytes=0,
+        keep_suites=2,
+    ).prune(runs_root, protect=(protected_suite,))
+
+    assert oldest_suite in result.removed_paths
+    assert not oldest_suite.exists()
+    assert newer_suite.exists()
+    assert protected_suite.exists()
+
+
+def test_repo_workspace_has_no_generated_runtime_dirs() -> None:
+    generated = ["runs", "dvclive", "mlruns", ".handdetect"]
+    present = [path for path in generated if (ROOT / path).exists()]
+    assert present == []
+
+
 def test_compose_prepares_tmp_state_then_drops_to_host_uid() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     assert "HANDDETECT_COMPOSE_UID" in compose
@@ -68,9 +124,9 @@ def test_compose_prepares_tmp_state_then_drops_to_host_uid() -> None:
     assert "setpriv --reuid" in compose
 
 
-def test_dockerfile_marks_workspace_as_git_safe_directory() -> None:
+def test_dockerfile_does_not_require_runtime_git_safe_directory() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    assert "git config --system --add safe.directory /workspace" in dockerfile
+    assert "git config --system --add safe.directory /workspace" not in dockerfile
 
 
 def test_docker_image_defines_non_root_runtime_user() -> None:

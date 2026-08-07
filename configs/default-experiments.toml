@@ -1,10 +1,10 @@
 [runtime]
 data_root = "data"
-runs_root = "runs"
+runs_root = "/tmp/handdetect/runs"
 max_clip_workers = 1
 mlflow_tracking_uri = "/tmp/handdetect/mlruns"
 dvclive_root = "/tmp/handdetect/dvclive"
-evidently_root = "runs/evidently"
+evidently_root = "/tmp/handdetect/evidently"
 workbench_host = "127.0.0.1"
 workbench_port = 8000
 label_studio_url = ""

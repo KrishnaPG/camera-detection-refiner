@@ -14,6 +14,7 @@ class MlflowExperimentTracker:
 
     def log_run(self, summary: TrackingRunSummary) -> PlatformStatus:
         os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+        os.environ.setdefault("GIT_PYTHON_REFRESH", "quiet")
         mlflow.set_tracking_uri(self.tracking_uri)
         mlflow.set_experiment(str(summary.experiment_id))
         with mlflow.start_run(run_name=str(summary.run_id)) as run:

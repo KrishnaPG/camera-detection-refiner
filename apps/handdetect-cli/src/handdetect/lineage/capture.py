@@ -113,7 +113,9 @@ class LineageSnapshotWriter:
         self._copy_input_path(label_set_path, snapshot_root)
         self._copy_input_path(config_path, snapshot_root)
         for name in ["pyproject.toml", "Makefile", "README.md"]:
-            shutil.copy2(Path(name), snapshot_root / name)
+            source = Path(name)
+            if source.exists():
+                shutil.copy2(source, snapshot_root / name)
 
     def _copy_input_path(self, source: Path, snapshot_root: Path) -> None:
         if not source.exists():

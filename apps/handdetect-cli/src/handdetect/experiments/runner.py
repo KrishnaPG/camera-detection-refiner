@@ -15,6 +15,7 @@ from handdetect.report.static_report import StaticReportBuilder
 from handdetect.runs.catalog import RunCatalog
 from handdetect.runs.ids import RunIdProvider
 from handdetect.runs.manifest import RunManifest
+from handdetect.runs.retention import RuntimeRetentionPruner
 from handdetect.runs.store import RunArtifactStore
 from handdetect.tracking_platforms.dvc_tracker import DvcLiveTracker
 from handdetect.tracking_platforms.evidently_report import EvidentlyReportWriter
@@ -35,6 +36,8 @@ class ExperimentRunner:
         config_bytes = config.model_dump_json().encode("utf-8")
         config_hash = hashlib.sha256(config_bytes).hexdigest()
         clips = DatasetScanner().scan(config.runtime.data_root)
+        retention = RuntimeRetentionPruner()
+        retention.prune_default_runtime()
         catalog = RunCatalog.open(config.runtime.runs_root)
         run_ids: list[RunId] = []
 
@@ -124,6 +127,13 @@ class ExperimentRunner:
             self._write_suite_summary(store.root, clip_summaries)
             run_ids.append(run_id)
 
+        retention.prune_default_runtime(
+            protect=(
+                config.runtime.runs_root / str(suite_id),
+                config.runtime.dvclive_root / str(suite_id),
+                config.runtime.evidently_root / str(suite_id),
+            )
+        )
         return run_ids
 
     def _append_run_index(
