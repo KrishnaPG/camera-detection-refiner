@@ -11,6 +11,7 @@ from handdetect.tracking_platforms.interfaces import TrackingRunSummary
 class EvidentlyReportWriter:
     def write(self, summary: TrackingRunSummary) -> PlatformStatus:
         output = summary.run_root / "report" / "evidently.html"
+        output.parent.mkdir(parents=True, exist_ok=True)
         try:
             report = self._build_report()
             report.run(
@@ -21,7 +22,9 @@ class EvidentlyReportWriter:
                     }
                 ),
                 name=f"{summary.run_suite_id}/{summary.run_id}",
-            ).save_html(output)
+            ).save_html(str(output))
+            if not output.exists() or output.stat().st_size == 0:
+                raise RuntimeError(f"Evidently did not create report artifact at {output}")
             return PlatformStatus(status="exported", path=str(output))
         except Exception as exc:
             output.write_text(self._fallback_html(summary, str(exc)), encoding="utf-8")

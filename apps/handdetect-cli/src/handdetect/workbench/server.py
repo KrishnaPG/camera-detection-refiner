@@ -7,7 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import uvicorn
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from handdetect.lineage.replay import LineageReplayService
@@ -117,6 +117,11 @@ def create_app() -> FastAPI:
     @app.get("/artifacts/{suite_id}/{run_id}/{artifact_path:path}")
     def artifact(suite_id: str, run_id: str, artifact_path: str) -> FileResponse:
         target = runs_root() / suite_id / run_id / artifact_path
+        if not target.exists() or not target.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Artifact not found for {suite_id}/{run_id}: {artifact_path}",
+            )
         return FileResponse(target)
 
     return app

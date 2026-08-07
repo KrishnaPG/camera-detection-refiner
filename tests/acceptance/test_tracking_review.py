@@ -42,6 +42,9 @@ def test_tracking_exports_and_review_manifest_are_available() -> None:
     assert tracking["mlflow"]["status"] == "exported"
     assert tracking["dvc"]["status"] == "exported"
     assert tracking["evidently"]["status"] == "exported"
+    evidently_path = Path(tracking["evidently"]["path"])
+    assert evidently_path.exists()
+    assert evidently_path.stat().st_size > 0
     review = subprocess.run(
         [
             "python",
