@@ -75,7 +75,7 @@ services:
     user: "0:0"
     command: ["mongod", "--quiet", "--dbpath", "/data/db"]
     volumes:
-      - /tmp/handdetect/fiftyone-mongo:/data/db
+      - /tmp/handdetect-services/fiftyone-mongo:/data/db
 
   label-studio:
     image: heartexlabs/label-studio:1.21.0
@@ -145,4 +145,4 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - /tmp/handdetect/label-studio:/label-studio/data
+      - /tmp/handdetect-services/label-studio:/label-studio/data

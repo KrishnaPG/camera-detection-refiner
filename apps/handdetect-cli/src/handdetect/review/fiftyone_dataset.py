@@ -30,11 +30,20 @@ class FiftyOneDatasetPublisher:
             for sample in manifest["samples"]:
                 dataset.add_sample(self._build_sample(fo, run_root, sample))
             dataset.save()
+        except Exception as exc:
+            return dataset_name, None, str(exc)
+        try:
             session = fo.launch_app(dataset, address="0.0.0.0", port=5151, remote=True, auto=False)
         except Exception as exc:
+            if self._is_reusable_app_port_conflict(exc):
+                return dataset_name, "http://localhost:5151", None
             return dataset_name, None, str(exc)
         _SESSIONS[dataset_name] = session
         return dataset_name, f"http://localhost:{session.server_port}", None
+
+    def _is_reusable_app_port_conflict(self, exc: Exception) -> bool:
+        message = str(exc)
+        return "Address already in use" in message or "[Errno 98]" in message
 
     def _reset_dataset(self, fo: Any, dataset_name: str) -> None:
         if fo.dataset_exists(dataset_name):

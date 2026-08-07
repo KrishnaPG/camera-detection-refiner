@@ -91,8 +91,10 @@ def test_compose_starts_review_platform_infra() -> None:
     assert "fiftyone-mongo:" in compose
     assert "mongo:7.0.15" in compose
     assert "FIFTYONE_DATABASE_URI" in compose
+    assert "/tmp/handdetect-services/fiftyone-mongo:/data/db" in compose
     assert "label-studio:" in compose
     assert "heartexlabs/label-studio:1.21.0" in compose
+    assert "/tmp/handdetect-services/label-studio:/label-studio/data" in compose
     assert "HANDDETECT_LABEL_STUDIO_URL" in compose
     assert "HANDDETECT_LABEL_STUDIO_PUBLIC_URL" in compose
     assert "LABEL_STUDIO_USER_TOKEN" in compose

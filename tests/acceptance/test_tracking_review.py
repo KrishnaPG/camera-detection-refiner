@@ -252,52 +252,7 @@ def test_review_launcher_falls_back_when_fiftyone_runtime_breaks(monkeypatch, tm
 
 
 def test_fiftyone_publish_handles_decisions_without_frame_column(monkeypatch, tmp_path) -> None:
-    run_root = tmp_path / "runs" / "suite-a" / "run-a"
-    (run_root / "review").mkdir(parents=True)
-    (run_root / "report" / "samples").mkdir(parents=True)
-    (run_root / "tables").mkdir(parents=True)
-    image_path = run_root / "report" / "samples" / "sample-000.jpg"
-    import cv2
-
-    cv2.imwrite(str(image_path), np.full((8, 8, 3), 255, dtype=np.uint8))
-    (run_root / "review" / "fiftyone-dataset.json").write_text(
-        json.dumps(
-            {
-                "dataset_name": "handdetect_suite-a_run-a",
-                "samples": [{"clip_id": "clip-1", "frame": 0, "image_name": "sample-000.jpg"}],
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    pq.write_table(
-        pa.table(
-            {
-                "clip_id": ["clip-1"],
-                "detection_id": ["det-1"],
-                "frame_index": [0],
-                "x1": [1.0],
-                "y1": [1.0],
-                "x2": [7.0],
-                "y2": [7.0],
-                "confidence": [0.9],
-                "selected": [True],
-            }
-        ),
-        run_root / "tables" / "detections_clip-1.parquet",
-    )
-    pq.write_table(
-        pa.table(
-            {
-                "clip_id": ["clip-1"],
-                "detection_id": ["det-1"],
-                "decision": ["kept"],
-                "stage": ["max_two_selector"],
-                "reason": [""],
-            }
-        ),
-        run_root / "tables" / "decisions_clip-1.parquet",
-    )
+    run_root = _write_minimal_fiftyone_run(tmp_path)
     fake_fiftyone = _fake_fiftyone_module()
     monkeypatch.setitem(sys.modules, "fiftyone", fake_fiftyone)
 
@@ -313,6 +268,28 @@ def test_fiftyone_publish_handles_decisions_without_frame_column(monkeypatch, tm
     dataset = fake_fiftyone._datasets[dataset_name]
     assert len(dataset.samples) == 1
     assert len(dataset.samples[0]["cleaned"].detections) == 1
+
+
+def test_fiftyone_publish_reuses_existing_app_when_port_is_bound(monkeypatch, tmp_path) -> None:
+    run_root = _write_minimal_fiftyone_run(tmp_path)
+    fake_fiftyone = _fake_fiftyone_module()
+
+    def fail_launch_app(dataset, address: str, port: int, remote: bool, auto: bool):
+        raise OSError("[Errno 98] Address already in use")
+
+    fake_fiftyone.launch_app = fail_launch_app
+    monkeypatch.setitem(sys.modules, "fiftyone", fake_fiftyone)
+
+    dataset_name, url, error = FiftyOneDatasetPublisher().publish(
+        RunSuiteId("suite-a"),
+        RunId("run-a"),
+        run_root,
+    )
+
+    assert dataset_name == "handdetect_suite-a_run-a"
+    assert url == "http://localhost:5151"
+    assert error is None
+    assert dataset_name in fake_fiftyone._datasets
 
 
 def test_evidently_writer_uses_package_api_when_available(monkeypatch, tmp_path) -> None:
@@ -442,6 +419,56 @@ def _fake_fiftyone_module() -> types.ModuleType:
     fake.delete_dataset = lambda name: None
     fake.launch_app = lambda dataset, address, port, remote, auto: FakeSession()
     return fake
+
+
+def _write_minimal_fiftyone_run(tmp_path: Path) -> Path:
+    run_root = tmp_path / "runs" / "suite-a" / "run-a"
+    (run_root / "review").mkdir(parents=True)
+    (run_root / "report" / "samples").mkdir(parents=True)
+    (run_root / "tables").mkdir(parents=True)
+    image_path = run_root / "report" / "samples" / "sample-000.jpg"
+    import cv2
+
+    cv2.imwrite(str(image_path), np.full((8, 8, 3), 255, dtype=np.uint8))
+    (run_root / "review" / "fiftyone-dataset.json").write_text(
+        json.dumps(
+            {
+                "dataset_name": "handdetect_suite-a_run-a",
+                "samples": [{"clip_id": "clip-1", "frame": 0, "image_name": "sample-000.jpg"}],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    pq.write_table(
+        pa.table(
+            {
+                "clip_id": ["clip-1"],
+                "detection_id": ["det-1"],
+                "frame_index": [0],
+                "x1": [1.0],
+                "y1": [1.0],
+                "x2": [7.0],
+                "y2": [7.0],
+                "confidence": [0.9],
+                "selected": [True],
+            }
+        ),
+        run_root / "tables" / "detections_clip-1.parquet",
+    )
+    pq.write_table(
+        pa.table(
+            {
+                "clip_id": ["clip-1"],
+                "detection_id": ["det-1"],
+                "decision": ["kept"],
+                "stage": ["max_two_selector"],
+                "reason": [""],
+            }
+        ),
+        run_root / "tables" / "decisions_clip-1.parquet",
+    )
+    return run_root
 
 
 def _fake_evidently_module(*, raise_on_run: bool = False) -> types.ModuleType:

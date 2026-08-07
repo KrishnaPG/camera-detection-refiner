@@ -129,11 +129,23 @@ class LineageReplayService:
         runtime["dvclive_root"] = str(dvclive_root())
         runtime["mlflow_tracking_uri"] = str(mlflow_root())
         runtime["evidently_root"] = str(runs_root() / "evidently")
+        self._apply_review_runtime_env_overrides(runtime)
         experiment = self._target_experiment(document, experiment_id)
         for item in overrides:
             self._apply_override(document, experiment, item)
         target.write_text(tomlkit.dumps(document), encoding="utf-8")
         ExperimentConfigParser().parse_path(target)
+
+    def _apply_review_runtime_env_overrides(self, runtime: tomlkit.items.Table) -> None:
+        env_map = {
+            "HANDDETECT_LABEL_STUDIO_URL": "label_studio_url",
+            "HANDDETECT_LABEL_STUDIO_PUBLIC_URL": "label_studio_public_url",
+            "HANDDETECT_LABEL_STUDIO_TOKEN": "label_studio_token",
+        }
+        for env_name, field_name in env_map.items():
+            value = os.environ.get(env_name, "").strip()
+            if value:
+                runtime[field_name] = value
 
     def _restore_source_snapshot(self, snapshot_root: Path, worktree: Path) -> str:
         if not snapshot_root.exists():
