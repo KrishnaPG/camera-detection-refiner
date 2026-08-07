@@ -1,13 +1,3 @@
-from __future__ import annotations
+from mot_interfaces.interfaces import AssociationAdapter
 
-from typing import Protocol
-
-from handdetect.filters.results import GeometricStageResult, TrackBlock
-from handdetect.hotpath.blocks import DetectionBlock
-from handdetect_domain.config import ByteTrackConfig
-
-
-class AssociationAdapter(Protocol):
-    def associate(
-        self, block: DetectionBlock, geometric: GeometricStageResult, config: ByteTrackConfig
-    ) -> TrackBlock: ...
+__all__ = ["AssociationAdapter"]
