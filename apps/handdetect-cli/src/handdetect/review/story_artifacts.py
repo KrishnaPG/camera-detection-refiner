@@ -7,11 +7,26 @@ from pathlib import Path
 from typing import cast
 
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
+from handdetect.review.story_constants import (
+    ADAPTER_OVERLAY_FILE,
+    BOX_INDEX_FILE,
+    COMPARE_OVERLAY_FILE,
+    DEFAULT_LAYOUT_ID,
+    PACKAGE_ID,
+    PLATFORM_LABELS,
+    RAW_OVERLAY_FILE,
+    REASON_LABELS,
+    REJECTED_OVERLAY_FILE,
+    SUPPORT_ROWS,
+    THUMBNAIL_STRIP_FILE,
+    WORKSPACE_ID,
+)
 from pydantic import BaseModel, ConfigDict, Field
+from visual_reporting.review_media import (  # type: ignore[import-untyped]
+    ClipMediaInput,
+    ReviewMediaArtifactBuilder,
+)
 
-PACKAGE_ID = "handdetect_quality_adapter"
-WORKSPACE_ID = "handdetect_quality_story"
-DEFAULT_LAYOUT_ID = "handdetect_customer_demo_console"
 JsonMap = dict[str, object]
 JsonRows = list[JsonMap]
 
@@ -49,6 +64,12 @@ class StoryClip(BaseModel):
     rejected_detection_count: int
     changed_frame_count: int
     source_video_url: str
+    raw_overlay_url: str
+    adapter_overlay_url: str
+    rejected_overlay_url: str
+    compare_overlay_url: str
+    thumbnail_strip_url: str
+    boxes_path: str
     timeline_path: str
     events_path: str
     tracks_path: str
@@ -97,7 +118,7 @@ class StoryArtifactBuilder:
             support_states=_support_states(),
             platforms=_platform_links(run_root),
         )
-        _write_clip_artifacts(run_root, clips)
+        _write_clip_artifacts(run_root, Path(_string_value(manifest.get("data_root"))), clips)
         output = run_root / "review" / "story.json"
         _write_json(
             output,
@@ -126,6 +147,12 @@ def _clip_story(run_root: Path, manifest: JsonMap, clip_id: str) -> StoryClip:
         rejected_detection_count=len(decisions) - decisions_by_kind.get("kept", 0),
         changed_frame_count=len(changed_frames),
         source_video_url=f"source-video/{clip_id}/left",
+        raw_overlay_url=f"review/clips/{clip_id}/{RAW_OVERLAY_FILE}",
+        adapter_overlay_url=f"review/clips/{clip_id}/{ADAPTER_OVERLAY_FILE}",
+        rejected_overlay_url=f"review/clips/{clip_id}/{REJECTED_OVERLAY_FILE}",
+        compare_overlay_url=f"review/clips/{clip_id}/{COMPARE_OVERLAY_FILE}",
+        thumbnail_strip_url=f"review/clips/{clip_id}/{THUMBNAIL_STRIP_FILE}",
+        boxes_path=f"review/clips/{clip_id}/{BOX_INDEX_FILE}",
         timeline_path=f"review/clips/{clip_id}/timeline.json",
         events_path=f"review/clips/{clip_id}/events.json",
         tracks_path=f"review/clips/{clip_id}/tracks.json",
@@ -133,7 +160,8 @@ def _clip_story(run_root: Path, manifest: JsonMap, clip_id: str) -> StoryClip:
     )
 
 
-def _write_clip_artifacts(run_root: Path, clips: tuple[StoryClip, ...]) -> None:
+def _write_clip_artifacts(run_root: Path, data_root: Path, clips: tuple[StoryClip, ...]) -> None:
+    media_builder = ReviewMediaArtifactBuilder()
     for clip in clips:
         clip_root = run_root / "review" / "clips" / clip.clip_id
         detections = _read_rows(run_root / "tables" / f"detections_{clip.clip_id}.parquet")
@@ -143,6 +171,15 @@ def _write_clip_artifacts(run_root: Path, clips: tuple[StoryClip, ...]) -> None:
         _write_json(clip_root / "tracks.json", _tracks(tracks, detections))
         _write_json(clip_root / "chapters.json", _chapters(clip.clip_id, decisions))
         _write_json(clip_root / "timeline.json", _timeline(clip, decisions, tracks))
+        media_builder.build_clip(
+            ClipMediaInput(
+                run_root=run_root,
+                data_root=data_root,
+                clip_id=clip.clip_id,
+                frame_count=clip.frame_count,
+                fps=clip.fps,
+            )
+        )
 
 
 def _events(detections: JsonRows, decisions: JsonRows) -> JsonMap:
@@ -268,20 +305,13 @@ def _platform_links(run_root: Path) -> tuple[JsonMap, ...]:
 
 
 def _platform_label(platform: str) -> str:
-    return {
-        "dvc": "DVC",
-        "evidently": "Evidently",
-        "fiftyone": "FiftyOne",
-        "label_studio": "Label Studio",
-        "mlflow": "MLflow",
-        "report": "Report",
-    }.get(platform, platform.replace("_", " ").title())
+    return PLATFORM_LABELS.get(platform, platform.replace("_", " ").title())
 
 
 def _support_states() -> tuple[SupportState, ...]:
     return tuple(
         SupportState(tag=tag, label=label, state=state, description=description)
-        for tag, label, state, description in _SUPPORT_ROWS
+        for tag, label, state, description in SUPPORT_ROWS
     )
 
 
@@ -305,7 +335,7 @@ def _display_label(row: JsonMap) -> str:
 
 
 def _customer_label(reason: str) -> str:
-    return _REASON_LABELS.get(reason, reason.replace("_", " ").title())
+    return REASON_LABELS.get(reason, reason.replace("_", " ").title())
 
 
 def _optional_int(value: object) -> int | None:
@@ -366,83 +396,3 @@ def _float_value(value: object, fallback: float = 0.0) -> float:
     if isinstance(value, str):
         return float(value)
     return fallback
-
-
-_REASON_LABELS = {
-    "duplicate_overlap": "Duplicate Detections",
-    "implausible_size": "Implausible Size",
-    "implausible_shape": "Implausible Shape",
-    "implausible_displacement": "Implausible Motion",
-    "unsupported_track": "Unsupported Detection",
-    "static_scene": "Static Scene Detection",
-    "over_max_hands": "Max-Two Selection",
-}
-
-_SUPPORT_ROWS = (
-    (
-        "duplicate_boxes_on_one_hand",
-        "Duplicate boxes on one hand",
-        "implemented_rejection",
-        "Merged or rejected by overlap.",
-    ),
-    (
-        "implausible_size",
-        "Implausible size",
-        "implemented_rejection",
-        "Rejected by vectorized box area gate.",
-    ),
-    (
-        "implausible_shape",
-        "Implausible shape",
-        "implemented_rejection",
-        "Rejected by aspect-ratio gate.",
-    ),
-    (
-        "implausible_displacement",
-        "Implausible displacement",
-        "implemented_rejection",
-        "Rejected by temporal motion gate.",
-    ),
-    (
-        "unsupported_detection",
-        "Unsupported detection",
-        "implemented_rejection",
-        "Rejected when MOT support is too short.",
-    ),
-    (
-        "static_detection",
-        "Static detection",
-        "implemented_rejection",
-        "Rejected when static under camera motion.",
-    ),
-    (
-        "max_two_selection",
-        "Max-two selection",
-        "implemented_rejection",
-        "Only the top two wearer-hand candidates survive per frame.",
-    ),
-    (
-        "hand_exit_side_border",
-        "Hand exit side border",
-        "heuristic_candidate",
-        "Surfaced for review, not scored as correctness.",
-    ),
-    (
-        "brief_occlusion_candidate",
-        "Brief occlusion",
-        "heuristic_candidate",
-        "MOT continuity evidence only in Phase 1.",
-    ),
-    (
-        "possible_bystander_hand",
-        "Possible bystander hand",
-        "not_supported",
-        "Needs calibrated depth or labels.",
-    ),
-    (
-        "false_negative_interpolation",
-        "False-negative interpolation",
-        "not_supported",
-        "Out of scope; count remains zero.",
-    ),
-)

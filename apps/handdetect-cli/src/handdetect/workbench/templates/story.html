@@ -62,11 +62,18 @@
       .videoGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; padding: 0.75rem; min-height: 0; }
       .videoPane { position: relative; border: 1px solid var(--line); background: #000; overflow: hidden; }
       .videoPane video { width: 100%; height: 100%; object-fit: contain; display: block; }
+      .overlaySvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: auto; }
+      .overlayBox { fill: transparent; stroke-width: 4; cursor: pointer; vector-effect: non-scaling-stroke; }
+      .overlayBox.kept { stroke: var(--green); }
+      .overlayBox.rejected { stroke: var(--red); }
+      .overlayBox.merged { stroke: var(--amber); }
+      .overlayBox.dimmed { opacity: 0.16; }
       .badge { position: absolute; left: 0.6rem; top: 0.55rem; padding: 0.28rem 0.45rem; border-radius: 0.25rem; font-size: 0.72rem; font-weight: 700; background: rgba(12, 21, 32, 0.82); border: 1px solid currentColor; }
       .raw { color: var(--blue); }
       .approved { color: var(--green); }
       .sync { position: absolute; right: 0.6rem; bottom: 0.55rem; color: var(--green); background: rgba(8, 14, 20, 0.84); padding: 0.2rem 0.45rem; border-radius: 0.25rem; }
       .controls { display: flex; align-items: center; justify-content: center; gap: 0.55rem; border-top: 1px solid var(--line); background: #09111a; }
+      .controls input { width: 8rem; }
       .inspector { border-right: 0; }
       .decisionCard { margin: 0.75rem; border: 1px solid var(--line); background: var(--panel-strong); border-radius: 0.45rem; padding: 0.75rem; }
       .decisionLabel { display: inline-block; margin: 0.4rem 0; padding: 0.25rem 0.45rem; border-radius: 0.25rem; font-weight: 750; background: rgba(255, 69, 58, 0.18); color: var(--red); }
@@ -79,13 +86,18 @@
       .pill.not_supported { color: #8d98a5; border-style: dashed; }
       .timeline { border-top: 1px solid var(--line); background: #071019; display: grid; grid-template-columns: 17rem 1fr 18rem; min-height: 0; }
       .trackList { border-right: 1px solid var(--line); padding: 0.75rem; overflow: auto; }
-      .timeSurface { position: relative; padding: 1rem; overflow: hidden; border-right: 1px solid var(--line); }
+      .timeSurface { position: relative; padding: 1rem; overflow-x: auto; overflow-y: hidden; border-right: 1px solid var(--line); }
+      .timeContent { position: relative; min-width: 100%; height: 100%; }
       .ruler { height: 2.2rem; border-bottom: 1px solid var(--line); color: var(--muted); }
-      .lane { height: 1.25rem; margin: 0.35rem 0; background: rgba(48, 209, 88, 0.16); border-left: 3px solid var(--green); }
-      .markers { position: absolute; left: 1rem; right: 1rem; bottom: 1rem; height: 6rem; border-top: 1px solid #123047; }
+      .thumbStrip { height: 2.1rem; width: 100%; object-fit: cover; opacity: 0.68; border-bottom: 1px solid #123047; }
+      .lane { position: relative; height: 1.05rem; margin: 0.28rem 0; background: rgba(48, 209, 88, 0.08); }
+      .lane span { position: absolute; height: 100%; background: rgba(48, 209, 88, 0.38); border-left: 3px solid var(--green); }
+      .markers { position: absolute; left: 0; right: 0; bottom: 1rem; height: 5.5rem; border-top: 1px solid #123047; }
       .marker { position: absolute; bottom: 0.35rem; width: 0.55rem; height: 0.55rem; transform: rotate(45deg); background: var(--red); border: 0; padding: 0; }
       .marker.merged { background: var(--amber); }
-      .playhead { position: absolute; top: 1rem; bottom: 1rem; left: 50%; width: 2px; background: var(--blue); box-shadow: 0 0 0 1px rgba(47, 125, 255, 0.35); }
+      .trackButton { display: block; width: 100%; margin: 0.35rem 0; text-align: left; }
+      .trackButton.active { border-color: var(--green); color: var(--green); }
+      .playhead { position: absolute; top: 0; bottom: 0.4rem; left: 0; width: 2px; background: var(--blue); box-shadow: 0 0 0 1px rgba(47, 125, 255, 0.35); pointer-events: none; }
       .platforms { padding: 0.75rem; overflow: auto; }
       .platform { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid #152536; }
     </style>
@@ -135,10 +147,12 @@
           <div class="videoGrid">
             <div class="videoPane">
               <video id="rawVideo" controls muted preload="metadata"></video>
+              <svg id="rawOverlaySvg" class="overlaySvg" preserveAspectRatio="xMidYMid meet"></svg>
               <span class="badge raw">RAW DETECTOR</span>
             </div>
             <div class="videoPane">
               <video id="adapterVideo" controls muted preload="metadata"></video>
+              <svg id="adapterOverlaySvg" class="overlaySvg" preserveAspectRatio="xMidYMid meet"></svg>
               <span class="badge approved">APPROVED HAND TRACKS</span>
               <span class="sync">Sync</span>
             </div>
@@ -147,6 +161,7 @@
             <button id="prevEvent" type="button">Prev Event</button>
             <button id="playPause" type="button">Play/Pause</button>
             <button id="nextEvent" type="button">Next Event</button>
+            <label>Zoom <input id="zoomSlider" type="range" min="1" max="8" step="0.25" value="1" /></label>
             <span id="timeLabel">00:00.000</span>
           </div>
         </section>
@@ -161,10 +176,13 @@
           <div id="trackList"></div>
         </div>
         <div class="timeSurface">
-          <div class="ruler" id="ruler">Loading timeline</div>
-          <div id="lanes"></div>
-          <div class="markers" id="markers"></div>
-          <div class="playhead"></div>
+          <div class="timeContent" id="timeContent">
+            <div class="ruler" id="ruler">Loading timeline</div>
+            <img id="thumbStrip" class="thumbStrip" alt="" />
+            <div id="lanes"></div>
+            <div class="markers" id="markers"></div>
+            <div class="playhead" id="playhead"></div>
+          </div>
         </div>
         <div class="platforms">
           <strong>Platform Bridge</strong>
@@ -186,29 +204,51 @@
       const story = JSON.parse(root.dataset.story);
       const rawVideo = document.getElementById("rawVideo");
       const adapterVideo = document.getElementById("adapterVideo");
+      const rawOverlaySvg = document.getElementById("rawOverlaySvg");
+      const adapterOverlaySvg = document.getElementById("adapterOverlaySvg");
       const timeLabel = document.getElementById("timeLabel");
       const decisionCard = document.getElementById("decisionCard");
+      const timeSurface = document.querySelector(".timeSurface");
+      const timeContent = document.getElementById("timeContent");
+      const playhead = document.getElementById("playhead");
+      const zoomSlider = document.getElementById("zoomSlider");
+      const thumbStrip = document.getElementById("thumbStrip");
       let activeClip = story.clips[0];
       let events = [];
       let eventIndex = 0;
+      let activeTimeline = null;
+      let boxesByFrame = new Map();
+      let selectedTrackId = null;
+      let isScrubbing = false;
+
+      function artifactUrl(path) {
+        return `/artifacts/{{ suite_id }}/{{ run_id }}/${path}`;
+      }
 
       async function loadClip(clip) {
         activeClip = clip;
-        rawVideo.src = clip.source_video_url;
-        adapterVideo.src = clip.source_video_url;
-        const [eventPayload, timelinePayload, trackPayload] = await Promise.all([
+        rawVideo.src = artifactUrl(clip.raw_overlay_url);
+        adapterVideo.src = artifactUrl(clip.adapter_overlay_url);
+        thumbStrip.src = artifactUrl(clip.thumbnail_strip_url);
+        const [eventPayload, timelinePayload, trackPayload, boxPayload] = await Promise.all([
           fetch(`/artifacts/{{ suite_id }}/{{ run_id }}/${clip.events_path}`).then((r) => r.json()),
           fetch(`/artifacts/{{ suite_id }}/{{ run_id }}/${clip.timeline_path}`).then((r) => r.json()),
           fetch(`/artifacts/{{ suite_id }}/{{ run_id }}/${clip.tracks_path}`).then((r) => r.json()),
+          fetch(`/artifacts/{{ suite_id }}/{{ run_id }}/${clip.boxes_path}`).then((r) => r.json()),
         ]);
         events = eventPayload.events.filter((event) => event.decision !== "kept");
+        boxesByFrame = new Map(boxPayload.frames.map((frame) => [frame.frame, frame.boxes]));
+        rawOverlaySvg.setAttribute("viewBox", `0 0 ${boxPayload.video_width} ${boxPayload.video_height}`);
+        adapterOverlaySvg.setAttribute("viewBox", `0 0 ${boxPayload.video_width} ${boxPayload.video_height}`);
         eventIndex = 0;
+        selectedTrackId = null;
         renderTimeline(timelinePayload);
         renderTracks(trackPayload);
         selectEvent(0);
       }
 
       function renderTimeline(timeline) {
+        activeTimeline = timeline;
         document.getElementById("ruler").textContent = `${timeline.frame_count} frames · ${timeline.fps} FPS`;
         const markers = document.getElementById("markers");
         markers.innerHTML = "";
@@ -231,17 +271,42 @@
           button.style.bottom = `${0.35 + markerLane * 0.78}rem`;
           button.style.zIndex = String(1000 - index);
           button.title = `${marker.frame} · ${marker.label}`;
-          button.addEventListener("click", () => selectEvent(index));
+          button.addEventListener("pointerdown", (event) => {
+            event.stopPropagation();
+          });
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectEvent(index);
+          });
           markers.appendChild(button);
         });
         const lanes = document.getElementById("lanes");
-        lanes.innerHTML = timeline.track_lanes.slice(0, 8).map(() => '<div class="lane"></div>').join("");
+        lanes.innerHTML = timeline.track_lanes.slice(0, 8).map((trackId) =>
+          `<div class="lane"><span style="left:0;width:100%" title="Track ${trackId}"></span></div>`
+        ).join("");
+        applyZoom();
       }
 
       function renderTracks(payload) {
-        document.getElementById("trackList").innerHTML = payload.tracks.slice(0, 12).map((track) =>
-          `<p>ID ${track.track_id}<br /><span>${track.start_frame}-${track.end_frame} · ${track.observation_count} observations</span></p>`
+        const trackList = document.getElementById("trackList");
+        trackList.innerHTML = payload.tracks.slice(0, 12).map((track) =>
+          `<button class="trackButton" data-track-id="${track.track_id}">ID ${track.track_id}<br /><span>${track.start_frame}-${track.end_frame} · ${track.observation_count} observations</span></button>`
         ).join("");
+        trackList.querySelectorAll(".trackButton").forEach((button) => {
+          button.addEventListener("click", () => {
+            const trackId = Number(button.dataset.trackId);
+            selectedTrackId = selectedTrackId === trackId ? null : trackId;
+            renderTrackButtons();
+            renderFrameBoxes();
+          });
+        });
+        renderTrackButtons();
+      }
+
+      function renderTrackButtons() {
+        document.querySelectorAll(".trackButton").forEach((button) => {
+          button.classList.toggle("active", Number(button.dataset.trackId) === selectedTrackId);
+        });
       }
 
       function selectEvent(index) {
@@ -251,9 +316,11 @@
         }
         eventIndex = Math.max(0, Math.min(index, events.length - 1));
         const event = events[eventIndex];
-        const seconds = event.frame / Math.max(activeClip.fps, 1);
-        rawVideo.currentTime = seconds;
-        adapterVideo.currentTime = seconds;
+        seekToFrame(event.frame);
+        showDecision(event);
+      }
+
+      function showDecision(event) {
         decisionCard.innerHTML = `
           <span class="decisionLabel">${event.decision.toUpperCase()}</span>
           <div class="kv">
@@ -263,13 +330,77 @@
             <span>Confidence</span><strong>${event.confidence.toFixed(3)}</strong>
             <span>Stage</span><strong>${event.stage}</strong>
             <span>Reason</span><strong>${event.display_label}</strong>
+            <span>Box</span><strong>${boxText(event.box)}</strong>
           </div>`;
+      }
+
+      function boxText(box) {
+        return `${Math.round(box.x1)},${Math.round(box.y1)} → ${Math.round(box.x2)},${Math.round(box.y2)}`;
+      }
+
+      function seekToFrame(frame) {
+        const seconds = frame / Math.max(activeClip.fps, 1);
+        rawVideo.currentTime = seconds;
+        adapterVideo.currentTime = seconds;
+        updatePlayhead();
+        renderFrameBoxes();
       }
 
       function syncVideos(source, target) {
         if (Math.abs(source.currentTime - target.currentTime) > 0.08) {
           target.currentTime = source.currentTime;
         }
+      }
+
+      function renderFrameBoxes() {
+        const frame = Math.round(rawVideo.currentTime * Math.max(activeClip.fps, 1));
+        const rows = boxesByFrame.get(frame) || [];
+        renderSvg(rawOverlaySvg, rows, "raw");
+        renderSvg(adapterOverlaySvg, rows, "adapter");
+      }
+
+      function renderSvg(svg, rows, mode) {
+        svg.innerHTML = "";
+        rows.forEach((row) => {
+          if (mode === "adapter" && row.decision !== "kept") return;
+          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          rect.setAttribute("x", row.x1);
+          rect.setAttribute("y", row.y1);
+          rect.setAttribute("width", Math.max(row.x2 - row.x1, 1));
+          rect.setAttribute("height", Math.max(row.y2 - row.y1, 1));
+          rect.classList.add("overlayBox", row.decision);
+          rect.classList.toggle("dimmed", selectedTrackId !== null && row.track_id !== selectedTrackId);
+          rect.addEventListener("click", () => inspectBox(row));
+          svg.appendChild(rect);
+        });
+      }
+
+      function inspectBox(row) {
+        showDecision({
+          ...row,
+          box: row,
+          display_label: row.reason || row.stage || row.decision,
+        });
+      }
+
+      function updatePlayhead() {
+        if (!activeTimeline) return;
+        const frame = rawVideo.currentTime * Math.max(activeClip.fps, 1);
+        const percent = Math.min(100, Math.max(0, frame / Math.max(activeTimeline.frame_count, 1) * 100));
+        playhead.style.left = `${percent}%`;
+        timeLabel.textContent = `${rawVideo.currentTime.toFixed(3)}s · frame ${Math.round(frame)}`;
+      }
+
+      function timelineFrameFromEvent(event) {
+        const box = timeContent.getBoundingClientRect();
+        const localX = event.clientX - box.left;
+        const percent = Math.min(1, Math.max(0, localX / Math.max(box.width, 1)));
+        return Math.round(percent * Math.max(activeTimeline.frame_count - 1, 0));
+      }
+
+      function applyZoom() {
+        timeContent.style.width = `${Number(zoomSlider.value) * 100}%`;
+        updatePlayhead();
       }
 
       document.querySelectorAll(".clip").forEach((button) => {
@@ -290,9 +421,27 @@
       });
       document.getElementById("prevEvent").addEventListener("click", () => selectEvent(eventIndex - 1));
       document.getElementById("nextEvent").addEventListener("click", () => selectEvent(eventIndex + 1));
+      zoomSlider.addEventListener("input", applyZoom);
+      timeSurface.addEventListener("pointerdown", (event) => {
+        if (event.target.closest(".marker")) return;
+        isScrubbing = true;
+        timeSurface.setPointerCapture(event.pointerId);
+        seekToFrame(timelineFrameFromEvent(event));
+      });
+      timeSurface.addEventListener("pointermove", (event) => {
+        if (isScrubbing) seekToFrame(timelineFrameFromEvent(event));
+      });
+      timeSurface.addEventListener("pointerup", () => { isScrubbing = false; });
+      timeSurface.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        const next = Math.min(8, Math.max(1, Number(zoomSlider.value) + (event.deltaY < 0 ? 0.25 : -0.25)));
+        zoomSlider.value = String(next);
+        applyZoom();
+      }, { passive: false });
       rawVideo.addEventListener("timeupdate", () => {
         syncVideos(rawVideo, adapterVideo);
-        timeLabel.textContent = `${rawVideo.currentTime.toFixed(3)}s`;
+        updatePlayhead();
+        renderFrameBoxes();
       });
       loadClip(activeClip);
     </script>

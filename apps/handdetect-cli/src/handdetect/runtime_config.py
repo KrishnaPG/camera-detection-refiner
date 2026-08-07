@@ -32,6 +32,11 @@ def parse_config_with_runtime_env(config_path: Path) -> ValidatedExperimentConfi
         "HANDDETECT_LABEL_STUDIO_URL": "label_studio_url",
         "HANDDETECT_LABEL_STUDIO_PUBLIC_URL": "label_studio_public_url",
         "HANDDETECT_LABEL_STUDIO_TOKEN": "label_studio_token",
+        "HANDDETECT_CVAT_URL": "cvat_url",
+        "HANDDETECT_CVAT_PUBLIC_URL": "cvat_public_url",
+        "HANDDETECT_CVAT_USERNAME": "cvat_username",
+        "HANDDETECT_CVAT_PASSWORD": "cvat_password",
+        "HANDDETECT_EVIDENTLY_PUBLIC_URL": "evidently_public_url",
     }
     for env_name, field_name in env_map.items():
         value = os.environ.get(env_name, "").strip()

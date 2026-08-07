@@ -244,13 +244,17 @@ def serve(host: str, port: int) -> None:
 def service_links() -> dict[str, str]:
     workbench_url = os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", "").strip()
     mlflow_url = os.environ.get("HANDDETECT_MLFLOW_PUBLIC_URL", "").strip()
+    evidently_url = os.environ.get("HANDDETECT_EVIDENTLY_PUBLIC_URL", "").strip()
     fiftyone_url = os.environ.get("HANDDETECT_FIFTYONE_PUBLIC_URL", "").strip()
     label_studio_url = os.environ.get("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "").strip()
+    cvat_url = os.environ.get("HANDDETECT_CVAT_PUBLIC_URL", "").strip()
     return {
         "workbench": workbench_url or "http://127.0.0.1:8000",
         "mlflow": mlflow_url or "",
+        "evidently": evidently_url or "",
         "fiftyone": fiftyone_url or "",
         "label_studio": label_studio_url or "",
+        "cvat": cvat_url or "",
     }
 
 
@@ -261,6 +265,8 @@ def allowed_cors_origins() -> list[str]:
             os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", ""),
             os.environ.get("HANDDETECT_FIFTYONE_PUBLIC_URL", ""),
             os.environ.get("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", ""),
+            os.environ.get("HANDDETECT_EVIDENTLY_PUBLIC_URL", ""),
+            os.environ.get("HANDDETECT_CVAT_PUBLIC_URL", ""),
         ]
         if url.strip()
     }

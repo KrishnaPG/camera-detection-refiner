@@ -28,4 +28,7 @@ class ReviewPlatformManifest(BaseModel):
     evidently: ReviewPlatformStatus
     fiftyone: ReviewPlatformStatus
     label_studio: ReviewPlatformStatus
+    cvat: ReviewPlatformStatus
+    datumaro: ReviewPlatformStatus
+    rerun: ReviewPlatformStatus
     fiftyone_dataset: str

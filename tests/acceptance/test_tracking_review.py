@@ -108,6 +108,21 @@ def test_tracking_exports_and_review_manifest_are_available() -> None:
     assert "not yet generated" not in report_html
     assert "http://10.7.0.4:60900" in report_html
     assert "report/visual-review.html" in report_html
+    story_manifest = json.loads((run_root / "review" / "story.json").read_text(encoding="utf-8"))
+    first_clip = story_manifest["clips"][0]
+    assert first_clip["raw_overlay_url"].endswith("/raw_overlay.mp4")
+    assert first_clip["adapter_overlay_url"].endswith("/adapter_overlay.mp4")
+    assert first_clip["rejected_overlay_url"].endswith("/rejected_overlay.mp4")
+    assert first_clip["compare_overlay_url"].endswith("/compare_raw_adapter.mp4")
+    assert first_clip["thumbnail_strip_url"].endswith("/thumbnail_strip.webp")
+    for clip in story_manifest["clips"]:
+        clip_root = run_root / "review" / "clips" / clip["clip_id"]
+        assert (clip_root / "raw_overlay.mp4").stat().st_size > 0
+        assert (clip_root / "adapter_overlay.mp4").stat().st_size > 0
+        assert (clip_root / "rejected_overlay.mp4").stat().st_size > 0
+        assert (clip_root / "compare_raw_adapter.mp4").stat().st_size > 0
+        assert (clip_root / "thumbnail_strip.webp").stat().st_size > 0
+        assert (clip_root / "boxes.json").stat().st_size > 0
     visual_review = (run_root / "report" / "visual-review.html").read_text(encoding="utf-8")
     assert "Raw detections" in visual_review
     assert "Kept output" in visual_review

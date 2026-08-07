@@ -100,7 +100,9 @@ class ExperimentRunner:
                 tracking_summary
             )
             dvc_status = DvcLiveTracker(config.runtime.dvclive_root).log_run(tracking_summary)
-            evidently_status = EvidentlyReportWriter().write(tracking_summary)
+            evidently_status = EvidentlyReportWriter(config.runtime.evidently_root).write(
+                tracking_summary
+            )
             TrackingExportStatusWriter().write(
                 TrackingExportStatus(
                     mlflow=mlflow_status, dvc=dvc_status, evidently=evidently_status

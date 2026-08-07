@@ -17,6 +17,9 @@
       <li><a href="{{ platforms.evidently.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/evidently.html') }}">Evidently report</a></li>
       <li><a href="{{ platforms.fiftyone.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/fiftyone-dataset.json') }}">FiftyOne</a></li>
       <li><a href="{{ platforms.label_studio.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/labelstudio-tasks.json') }}">Label Studio</a></li>
+      <li><a href="{{ platforms.cvat.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/cvat-handoff.json') }}">CVAT</a></li>
+      <li><a href="{{ platforms.datumaro.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/datumaro-handoff.json') }}">Datumaro</a></li>
+      <li><a href="{{ platforms.rerun.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/rerun-handoff.json') }}">Rerun</a></li>
       {% else %}
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/index.html">Static report</a></li>
       <li><a href="/runs/{{ suite_id }}/{{ run_id }}/story">Local Story Review</a></li>
@@ -25,6 +28,9 @@
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/evidently.html">Evidently report</a></li>
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/fiftyone-dataset.json">FiftyOne dataset manifest</a></li>
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/labelstudio-tasks.json">Label Studio tasks</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/cvat-handoff.json">CVAT handoff</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/datumaro-handoff.json">Datumaro handoff</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/rerun-handoff.json">Rerun handoff</a></li>
       {% endif %}
       <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/lineage/replay.lock.json">Replay lock</a></li>
     </ul>
@@ -51,6 +57,9 @@
       <li>Evidently: {{ platforms.evidently.status }} {% if platforms.evidently.url %}<a href="{{ platforms.evidently.url }}">{{ platforms.evidently.url }}</a>{% endif %}</li>
       <li>FiftyOne: {{ platforms.fiftyone.status }} {% if platforms.fiftyone.url %}<a href="{{ platforms.fiftyone.url }}">{{ platforms.fiftyone.url }}</a>{% endif %}</li>
       <li>Label Studio: {{ platforms.label_studio.status }} {% if platforms.label_studio.url %}<a href="{{ platforms.label_studio.url }}">{{ platforms.label_studio.url }}</a>{% endif %}</li>
+      <li>CVAT: {{ platforms.cvat.status }} {% if platforms.cvat.url %}<a href="{{ platforms.cvat.url }}">{{ platforms.cvat.url }}</a>{% endif %}</li>
+      <li>Datumaro: {{ platforms.datumaro.status }} {% if platforms.datumaro.url %}<a href="{{ platforms.datumaro.url }}">{{ platforms.datumaro.url }}</a>{% endif %}</li>
+      <li>Rerun: {{ platforms.rerun.status }} {% if platforms.rerun.url %}<a href="{{ platforms.rerun.url }}">{{ platforms.rerun.url }}</a>{% endif %}</li>
     </ul>
     <pre>{{ platforms | tojson(indent=2) }}</pre>
     {% endif %}

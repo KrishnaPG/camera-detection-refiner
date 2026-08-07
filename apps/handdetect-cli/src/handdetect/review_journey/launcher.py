@@ -5,6 +5,8 @@ from pathlib import Path
 
 from dq_contracts.ids import RunId, RunSuiteId
 from handdetect.report.static_report import StaticReportBuilder
+from handdetect.review.cvat_export import CvatHandoffExporter
+from handdetect.review.datumaro_export import DatumaroHandoffExporter, RerunHandoffExporter
 from handdetect.review.fiftyone_dataset import FiftyOneDatasetPublisher
 from handdetect.review.labelstudio_client import LabelStudioPublisher
 from handdetect.review.story_artifacts import StoryArtifactBuilder
@@ -30,6 +32,9 @@ class ReviewJourneyLauncher:
             suite_id, run_id, run_root
         )
         label_status = self._label_studio_status(runtime, run_root)
+        cvat_status = CvatHandoffExporter().export(run_root, runtime.cvat_public_url)
+        datumaro_status = DatumaroHandoffExporter().export(run_root, "")
+        rerun_status = RerunHandoffExporter().export(run_root)
         manifest = ReviewPlatformManifest(
             run_suite_id=suite_id,
             run_id=run_id,
@@ -53,7 +58,7 @@ class ReviewJourneyLauncher:
             ),
             evidently=ReviewPlatformStatus(
                 status="ready" if tracking["evidently"].get("status") == "exported" else "degraded",
-                url=f"{self._workbench_url(runtime)}/artifacts/{suite_id}/{run_id}/report/evidently.html",
+                url=self._evidently_url(tracking["evidently"], runtime, suite_id, run_id),
                 path=Path(tracking["evidently"]["path"]),
                 message=tracking["evidently"].get("error") or "Evidently report",
             ),
@@ -66,6 +71,25 @@ class ReviewJourneyLauncher:
                 else f"FiftyOne dataset manifest only: {fiftyone_error}",
             ),
             label_studio=label_status,
+            cvat=ReviewPlatformStatus(
+                status=cvat_status.status,
+                url=cvat_status.url,
+                path=cvat_status.path,
+                message=cvat_status.message,
+                imported_task_count=cvat_status.imported_task_count,
+            ),
+            datumaro=ReviewPlatformStatus(
+                status=datumaro_status.status,
+                url=datumaro_status.url,
+                path=datumaro_status.path,
+                message=datumaro_status.message,
+            ),
+            rerun=ReviewPlatformStatus(
+                status=rerun_status.status,
+                url=rerun_status.url,
+                path=rerun_status.path,
+                message=rerun_status.message,
+            ),
             fiftyone_dataset=dataset_name,
         )
         output = run_root / "review" / "platforms.json"
@@ -91,6 +115,22 @@ class ReviewJourneyLauncher:
             f"{base_url.rstrip('/')}/"
             f"{MLFLOW_RUN_ROUTE.format(experiment_id=experiment_id, run_id=run_id)}"
         )
+
+    def _evidently_url(
+        self,
+        evidently_status: dict[str, object],
+        runtime: RuntimeConfig,
+        suite_id: RunSuiteId,
+        run_id: RunId,
+    ) -> str:
+        project_id = str(evidently_status.get("project_id") or "").strip()
+        snapshot_id = str(evidently_status.get("snapshot_id") or "").strip()
+        if runtime.evidently_public_url and project_id:
+            project_url = f"{runtime.evidently_public_url.rstrip('/')}/projects/{project_id}"
+            if snapshot_id:
+                return f"{project_url}/reports/{snapshot_id}"
+            return project_url
+        return f"{self._workbench_url(runtime)}/artifacts/{suite_id}/{run_id}/report/evidently.html"
 
     def _label_studio_status(self, runtime: RuntimeConfig, run_root: Path) -> ReviewPlatformStatus:
         tasks_path = run_root / "review" / "labelstudio-tasks.json"

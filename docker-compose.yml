@@ -34,6 +34,7 @@ services:
       HANDDETECT_WORKBENCH_INTERNAL_URL: "http://${HANDDETECT_LOOPBACK_HOST}:${HANDDETECT_WORKBENCH_CONTAINER_PORT}"
       HANDDETECT_WORKBENCH_PUBLIC_URL: "${HANDDETECT_WORKBENCH_PUBLIC_URL}"
       HANDDETECT_MLFLOW_PUBLIC_URL: "${HANDDETECT_MLFLOW_PUBLIC_URL}"
+      HANDDETECT_EVIDENTLY_PUBLIC_URL: "${HANDDETECT_EVIDENTLY_PUBLIC_URL}"
       HANDDETECT_RUNS_ROOT: "/tmp/handdetect/runs"
       HANDDETECT_MAX_RUNTIME_BYTES: "${HANDDETECT_MAX_RUNTIME_BYTES:-21474836480}"
       HANDDETECT_MIN_FREE_BYTES: "${HANDDETECT_MIN_FREE_BYTES:-5368709120}"
@@ -43,6 +44,7 @@ services:
       HANDDETECT_LABEL_STUDIO_PUBLIC_URL: "${HANDDETECT_LABEL_STUDIO_PUBLIC_URL}"
       HANDDETECT_LABEL_STUDIO_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
       HANDDETECT_FIFTYONE_PUBLIC_URL: "${HANDDETECT_FIFTYONE_PUBLIC_URL}"
+      HANDDETECT_CVAT_PUBLIC_URL: "${HANDDETECT_CVAT_PUBLIC_URL:-}"
       FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:${HANDDETECT_FIFTYONE_MONGO_CONTAINER_PORT}/fiftyone"
       GIT_PYTHON_REFRESH: "quiet"
     ports:
@@ -83,6 +85,34 @@ services:
       HANDDETECT_MLFLOW_CONTAINER_PORT: "${HANDDETECT_MLFLOW_CONTAINER_PORT}"
     ports:
       - "${HANDDETECT_BIND_HOST}:${HANDDETECT_MLFLOW_HOST_PORT}:${HANDDETECT_MLFLOW_CONTAINER_PORT}"
+    volumes:
+      - /tmp/handdetect:/tmp/handdetect
+    working_dir: /workspace
+
+  evidently:
+    image: handdetect-app:local
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/evidently
+        chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
+          /tmp/handdetect/home \
+          /tmp/handdetect/cache \
+          /tmp/handdetect/evidently
+        export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
+        exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
+          evidently ui --workspace /tmp/handdetect/evidently \
+            --host "$$HANDDETECT_CONTAINER_BIND_HOST" \
+            --port "$$HANDDETECT_EVIDENTLY_CONTAINER_PORT"
+    environment:
+      HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
+      HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+      HANDDETECT_CONTAINER_BIND_HOST: "${HANDDETECT_CONTAINER_BIND_HOST}"
+      HANDDETECT_EVIDENTLY_CONTAINER_PORT: "${HANDDETECT_EVIDENTLY_CONTAINER_PORT}"
+    ports:
+      - "${HANDDETECT_BIND_HOST}:${HANDDETECT_EVIDENTLY_HOST_PORT}:${HANDDETECT_EVIDENTLY_CONTAINER_PORT}"
     volumes:
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace

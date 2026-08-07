@@ -34,6 +34,7 @@ RUN apt-get update \
     libxext6 \
     libxrender1 \
     libxcb1 \
+    ffmpeg \
   && groupadd --gid 1000 handdetect \
   && useradd --uid 1000 --gid 1000 --home-dir /tmp/handdetect/home --shell /usr/sbin/nologin handdetect \
   && rm -rf /var/lib/apt/lists/*

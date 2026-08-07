@@ -375,7 +375,7 @@ class LineageReplayService:
         )
         mlflow_status = MlflowExperimentTracker(str(mlflow_root())).log_run(summary)
         dvc_status = DvcLiveTracker(dvclive_root()).log_run(summary)
-        evidently_status = EvidentlyReportWriter().write(summary)
+        evidently_status = EvidentlyReportWriter(runs_root().parent / "evidently").write(summary)
         TrackingExportStatusWriter().write(
             TrackingExportStatus(
                 mlflow=mlflow_status,

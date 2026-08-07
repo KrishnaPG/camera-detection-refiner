@@ -45,6 +45,11 @@ class RuntimeConfig(BaseModel):
     label_studio_url: str = ""
     label_studio_public_url: str = ""
     label_studio_token: str = ""
+    cvat_url: str = ""
+    cvat_public_url: str = ""
+    cvat_username: str = ""
+    cvat_password: str = ""
+    evidently_public_url: str = ""
 
 
 class ExperimentConfig(BaseModel):

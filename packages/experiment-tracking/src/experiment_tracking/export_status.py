@@ -17,6 +17,9 @@ class PlatformStatus(BaseModel):
     restore_authority: bool | None = None
     run_id: str | None = None
     url: str | None = None
+    workspace_path: str | None = None
+    project_id: str | None = None
+    snapshot_id: str | None = None
 
 
 class TrackingExportStatus(BaseModel):

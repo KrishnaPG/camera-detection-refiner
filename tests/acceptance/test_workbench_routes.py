@@ -21,15 +21,19 @@ def test_workbench_index_renders_operator_entrypoints(monkeypatch, tmp_path) -> 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HANDDETECT_WORKBENCH_PUBLIC_URL", "http://10.7.0.4:60050")
     monkeypatch.setenv("HANDDETECT_MLFLOW_PUBLIC_URL", "http://10.7.0.4:60900")
+    monkeypatch.setenv("HANDDETECT_EVIDENTLY_PUBLIC_URL", "http://10.7.0.4:60904")
     monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://10.7.0.4:60901")
     monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "http://10.7.0.4:60902")
+    monkeypatch.setenv("HANDDETECT_CVAT_PUBLIC_URL", "http://10.7.0.4:60903")
     response = TestClient(create_app()).get("/")
     assert response.status_code == 200
     assert "HandDetect Workbench" in response.text
     assert "http://10.7.0.4:60050" in response.text
     assert "http://10.7.0.4:60900" in response.text
+    assert "http://10.7.0.4:60904" in response.text
     assert "http://10.7.0.4:60901" in response.text
     assert "http://10.7.0.4:60902" in response.text
+    assert "http://10.7.0.4:60903" in response.text
     assert "Run Smoke Experiment" in response.text
 
 
@@ -70,6 +74,18 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
                     "status": "ready",
                     "url": "/artifacts/review/labelstudio-tasks.json",
                 },
+                "cvat": {
+                    "status": "handoff_ready",
+                    "url": "http://10.7.0.4:60903",
+                },
+                "datumaro": {
+                    "status": "handoff_file",
+                    "url": "/artifacts/review/datumaro-handoff.json",
+                },
+                "rerun": {
+                    "status": "handoff_file",
+                    "url": "/artifacts/review/rerun-handoff.json",
+                },
             },
             indent=2,
         ),
@@ -85,6 +101,9 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
     assert f"/artifacts/{suite_id}/{run_id}/report/visual-review.html" in response.text
     assert "http://10.7.0.4:60900" in response.text
     assert "http://10.7.0.4:60901" in response.text
+    assert "http://10.7.0.4:60903" in response.text
+    assert "Datumaro" in response.text
+    assert "Rerun" in response.text
     assert "Open Review Platforms" in response.text
     assert "Replay With Override" in response.text
 
@@ -112,9 +131,24 @@ def test_workbench_story_page_renders_video_review_layout(monkeypatch, tmp_path)
                 "clips": [
                     {
                         "clip_id": "clip-a",
+                        "source_video_url": "review/clips/clip-a/source.mp4",
+                        "raw_overlay_url": "review/clips/clip-a/raw_overlay.mp4",
+                        "adapter_overlay_url": "review/clips/clip-a/adapter_overlay.mp4",
+                        "rejected_overlay_url": "review/clips/clip-a/rejected_overlay.mp4",
+                        "compare_overlay_url": "review/clips/clip-a/compare_raw_adapter.mp4",
+                        "thumbnail_strip_url": "review/clips/clip-a/thumbnail_strip.webp",
+                        "events_path": "review/clips/clip-a/events.json",
+                        "timeline_path": "review/clips/clip-a/timeline.json",
+                        "tracks_path": "review/clips/clip-a/tracks.json",
+                        "chapters_path": "review/clips/clip-a/chapters.json",
+                        "boxes_path": "review/clips/clip-a/boxes.json",
                         "label": "fixture",
                         "frame_count": 120,
+                        "fps": 30,
+                        "raw_detection_count": 10,
+                        "kept_detection_count": 6,
                         "rejected_detection_count": 4,
+                        "changed_frame_count": 4,
                     }
                 ],
                 "support_states": [{"label": "Duplicate boxes", "state": "implemented_rejection"}],
@@ -132,6 +166,15 @@ def test_workbench_story_page_renders_video_review_layout(monkeypatch, tmp_path)
     assert "APPROVED HAND TRACKS" in response.text
     assert "Detection Decision" in response.text
     assert "Platform Bridge" in response.text
+    assert "rawOverlaySvg" in response.text
+    assert "adapterOverlaySvg" in response.text
+    assert "zoomSlider" in response.text
+    assert "timeContent" in response.text
+    assert "clip.raw_overlay_url" in response.text
+    assert "clip.adapter_overlay_url" in response.text
+    assert "clip.boxes_path" in response.text
+    assert "pointerdown" in response.text
+    assert "wheel" in response.text
 
 
 def test_source_video_path_blocks_escape_and_unknown_eye(tmp_path: Path) -> None:
