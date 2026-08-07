@@ -34,11 +34,11 @@ services:
       HANDDETECT_LABEL_STUDIO_URL: "http://label-studio:8080"
       HANDDETECT_LABEL_STUDIO_PUBLIC_URL: "http://localhost:8080"
       HANDDETECT_LABEL_STUDIO_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
+      HANDDETECT_FIFTYONE_PUBLIC_URL: "http://localhost:5151"
       FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:27017/fiftyone"
       GIT_PYTHON_REFRESH: "quiet"
     ports:
       - "8000:8000"
-      - "5151:5151"
     volumes:
       - ./data:/workspace/data:ro
       - /tmp/handdetect:/tmp/handdetect
@@ -79,6 +79,32 @@ services:
     command: ["mongod", "--quiet", "--dbpath", "/data/db"]
     volumes:
       - /tmp/handdetect-services/fiftyone-mongo:/data/db
+
+  fiftyone:
+    image: handdetect-app:local
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache
+        chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
+          /tmp/handdetect/home \
+          /tmp/handdetect/cache
+        export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
+        exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
+          fiftyone app launch --address 0.0.0.0 --port 5151 --remote --wait -1
+    environment:
+      HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
+      HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+      FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:27017/fiftyone"
+    ports:
+      - "5151:5151"
+    volumes:
+      - /tmp/handdetect:/tmp/handdetect
+    working_dir: /workspace
+    depends_on:
+      - fiftyone-mongo
 
   label-studio:
     image: heartexlabs/label-studio:1.21.0

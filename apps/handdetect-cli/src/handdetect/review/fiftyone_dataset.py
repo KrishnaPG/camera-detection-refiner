@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,9 @@ class FiftyOneDatasetPublisher:
             dataset.save()
         except Exception as exc:
             return dataset_name, None, str(exc)
+        public_url = os.environ.get("HANDDETECT_FIFTYONE_PUBLIC_URL", "").strip()
+        if public_url:
+            return dataset_name, public_url.rstrip("/"), None
         try:
             session = fo.launch_app(dataset, address="0.0.0.0", port=5151, remote=True, auto=False)
         except Exception as exc:

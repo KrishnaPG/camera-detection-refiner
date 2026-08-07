@@ -299,6 +299,29 @@ def test_fiftyone_publish_reuses_existing_app_when_port_is_bound(monkeypatch, tm
     assert _SESSIONS["existing"].dataset is fake_fiftyone._datasets[dataset_name]
 
 
+def test_fiftyone_publish_uses_configured_public_service_url(monkeypatch, tmp_path) -> None:
+    run_root = _write_minimal_fiftyone_run(tmp_path)
+    fake_fiftyone = _fake_fiftyone_module()
+
+    def fail_launch_app(dataset, address: str, port: int, remote: bool, auto: bool):
+        raise AssertionError("publisher should not launch in-process app")
+
+    fake_fiftyone.launch_app = fail_launch_app
+    monkeypatch.setitem(sys.modules, "fiftyone", fake_fiftyone)
+    monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://localhost:5151/")
+
+    dataset_name, url, error = FiftyOneDatasetPublisher().publish(
+        RunSuiteId("suite-a"),
+        RunId("run-a"),
+        run_root,
+    )
+
+    assert dataset_name == "handdetect_suite-a_run-a"
+    assert url == "http://localhost:5151"
+    assert error is None
+    assert dataset_name in fake_fiftyone._datasets
+
+
 def test_fiftyone_publish_degrades_when_external_app_owns_port(monkeypatch, tmp_path) -> None:
     run_root = _write_minimal_fiftyone_run(tmp_path)
     fake_fiftyone = _fake_fiftyone_module()
