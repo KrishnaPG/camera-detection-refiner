@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import cv2
 import pyarrow.parquet as pq
@@ -26,9 +27,9 @@ class FiftyOneDatasetPublisher:
             return dataset_name, None, str(exc)
         try:
             self._configure_database(fo)
-            self._reset_dataset(fo, dataset_name)
-            dataset = fo.Dataset(dataset_name)
+            dataset = self._load_or_create_dataset(fo, dataset_name)
             dataset.persistent = True
+            dataset.clear()
             for sample in manifest["samples"]:
                 dataset.add_sample(self._build_sample(fo, run_root, sample))
             dataset.save()
@@ -36,23 +37,33 @@ class FiftyOneDatasetPublisher:
             return dataset_name, None, str(exc)
         public_url = os.environ.get("HANDDETECT_FIFTYONE_PUBLIC_URL", "").strip()
         if public_url:
-            return dataset_name, public_url.rstrip("/"), None
+            return dataset_name, self._dataset_url(public_url, dataset_name), None
         try:
-            session = fo.launch_app(dataset, address="0.0.0.0", port=5151, remote=True, auto=False)
+            session = fo.launch_app(
+                dataset,
+                address=os.environ.get("HANDDETECT_CONTAINER_BIND_HOST", "0.0.0.0"),
+                port=int(os.environ.get("HANDDETECT_FIFTYONE_CONTAINER_PORT", "5151")),
+                remote=True,
+                auto=False,
+            )
         except Exception as exc:
             if self._is_reusable_app_port_conflict(exc):
                 reusable_url = self._reuse_existing_session(dataset)
                 if reusable_url is not None:
-                    return dataset_name, reusable_url, None
+                    return dataset_name, self._dataset_url(reusable_url, dataset_name), None
                 return (
                     dataset_name,
                     None,
-                    "FiftyOne app port 5151 is already in use; dataset was published "
+                    "FiftyOne app port is already in use; dataset was published "
                     "but the active app session could not be switched.",
                 )
             return dataset_name, None, str(exc)
         _SESSIONS[dataset_name] = session
-        return dataset_name, f"http://localhost:{session.server_port}", None
+        return (
+            dataset_name,
+            self._dataset_url(self._public_url_for_session(session.server_port), dataset_name),
+            None,
+        )
 
     def _configure_database(self, fo: Any) -> None:
         database_uri = os.environ.get("FIFTYONE_DATABASE_URI", "").strip()
@@ -72,14 +83,22 @@ class FiftyOneDatasetPublisher:
         for session in reversed(tuple(_SESSIONS.values())):
             try:
                 session.dataset = dataset
-                return f"http://localhost:{session.server_port}"
+                return self._public_url_for_session(session.server_port)
             except Exception:
                 continue
         return None
 
-    def _reset_dataset(self, fo: Any, dataset_name: str) -> None:
+    def _public_url_for_session(self, server_port: int) -> str:
+        public_host = os.environ.get("HANDDETECT_PUBLIC_HOST", "127.0.0.1").strip()
+        return f"http://{public_host}:{server_port}"
+
+    def _dataset_url(self, app_url: str, dataset_name: str) -> str:
+        return f"{app_url.rstrip('/')}/datasets/{quote(dataset_name, safe='')}"
+
+    def _load_or_create_dataset(self, fo: Any, dataset_name: str) -> Any:
         if fo.dataset_exists(dataset_name):
-            fo.delete_dataset(dataset_name)
+            return fo.load_dataset(dataset_name)
+        return fo.Dataset(dataset_name)
 
     def _build_sample(self, fo: Any, run_root: Path, sample: dict[str, Any]) -> Any:
         image_path = run_root / "report" / "samples" / str(sample["image_name"])

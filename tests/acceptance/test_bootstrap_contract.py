@@ -92,13 +92,16 @@ def test_compose_shares_tmp_runtime_state_across_services() -> None:
 
 def test_compose_starts_review_platform_infra() -> None:
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    env = (ROOT / ".env").read_text(encoding="utf-8")
     assert "fiftyone-mongo:" in compose
     assert "mongo:7.0.15" in compose
     assert "mongod --quiet --dbpath /data/db --bind_ip_all" in compose
     assert "condition: service_healthy" in compose
     assert "mongosh --quiet --eval" in compose
     assert "fiftyone:" in compose
-    assert "fiftyone app launch --address 0.0.0.0 --port 5151 --remote --wait -1" in compose
+    assert "fiftyone app launch \\" in compose
+    assert '--address "$$HANDDETECT_CONTAINER_BIND_HOST"' in compose
+    assert '--port "$$HANDDETECT_FIFTYONE_CONTAINER_PORT"' in compose
     assert "FIFTYONE_DATABASE_URI" in compose
     assert "HANDDETECT_FIFTYONE_PUBLIC_URL" in compose
     assert "/tmp/handdetect-services/fiftyone-mongo:/data/db" in compose
@@ -111,7 +114,14 @@ def test_compose_starts_review_platform_infra() -> None:
     assert "HANDDETECT_LABEL_STUDIO_URL" in compose
     assert "HANDDETECT_LABEL_STUDIO_PUBLIC_URL" in compose
     assert "LABEL_STUDIO_USER_TOKEN" in compose
-    assert '"8080:8080"' in compose
+    assert "${HANDDETECT_BIND_HOST}:${HANDDETECT_WORKBENCH_HOST_PORT}" in compose
+    assert "${HANDDETECT_BIND_HOST}:${HANDDETECT_MLFLOW_HOST_PORT}" in compose
+    assert "${HANDDETECT_BIND_HOST}:${HANDDETECT_FIFTYONE_HOST_PORT}" in compose
+    assert "${HANDDETECT_BIND_HOST}:${HANDDETECT_LABEL_STUDIO_HOST_PORT}" in compose
+    assert "HANDDETECT_WORKBENCH_HOST_PORT=60050" in env
+    assert "HANDDETECT_MLFLOW_HOST_PORT=60900" in env
+    assert "HANDDETECT_FIFTYONE_HOST_PORT=60901" in env
+    assert "HANDDETECT_LABEL_STUDIO_HOST_PORT=60902" in env
 
 
 def test_default_compose_does_not_source_mount_repo() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -9,6 +10,7 @@ from uuid import uuid4
 import uvicorn
 from dq_contracts.ids import RunId, RunSuiteId
 from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from handdetect.lineage.replay import LineageReplayService
@@ -19,6 +21,13 @@ from handdetect.runtime_paths import runs_root, workbench_job_root
 
 def create_app() -> FastAPI:
     app = FastAPI(title="HandDetect Workbench")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_cors_origins(),
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
     templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
     @app.get("/", response_class=HTMLResponse)
@@ -34,7 +43,11 @@ def create_app() -> FastAPI:
                     continue
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 runs.append(manifest)
-        return templates.TemplateResponse(request, "index.html", {"request": request, "runs": runs})
+        return templates.TemplateResponse(
+            request,
+            "index.html",
+            {"request": request, "runs": runs, "service_links": service_links()},
+        )
 
     @app.post("/run-smoke")
     def run_smoke() -> RedirectResponse:
@@ -172,6 +185,32 @@ def serve(host: str, port: int) -> None:
     uvicorn.run(create_app(), host=host, port=port)
 
 
+def service_links() -> dict[str, str]:
+    workbench_url = os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", "").strip()
+    mlflow_url = os.environ.get("HANDDETECT_MLFLOW_PUBLIC_URL", "").strip()
+    fiftyone_url = os.environ.get("HANDDETECT_FIFTYONE_PUBLIC_URL", "").strip()
+    label_studio_url = os.environ.get("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "").strip()
+    return {
+        "workbench": workbench_url or "http://127.0.0.1:8000",
+        "mlflow": mlflow_url or "",
+        "fiftyone": fiftyone_url or "",
+        "label_studio": label_studio_url or "",
+    }
+
+
+def allowed_cors_origins() -> list[str]:
+    origins = {
+        url.rstrip("/")
+        for url in [
+            os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", ""),
+            os.environ.get("HANDDETECT_FIFTYONE_PUBLIC_URL", ""),
+            os.environ.get("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", ""),
+        ]
+        if url.strip()
+    }
+    return sorted(origins) or ["*"]
+
+
 def parse_run_ids(log_text: str) -> tuple[str | None, str | None]:
     for line in reversed(log_text.splitlines()):
         match = re.search(r"\bsuite_id=([A-Za-z0-9._:-]+)\s+run_id=([A-Za-z0-9._:-]+)\b", line)
@@ -201,10 +240,13 @@ from urllib.request import Request, urlopen
 
 suite_id = quote(os.environ["HANDDETECT_JOB_SUITE_ID"], safe="")
 run_id = quote(os.environ["HANDDETECT_JOB_RUN_ID"], safe="")
-url = f"http://127.0.0.1:8000/runs/{{suite_id}}/{{run_id}}/review/open"
+base_url = os.environ.get("HANDDETECT_WORKBENCH_INTERNAL_URL", "http://127.0.0.1:8000")
+url = f"{{base_url.rstrip('/')}}/runs/{{suite_id}}/{{run_id}}/review/open"
+public_base_url = os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", base_url).rstrip("/")
+public_url = f"{{public_base_url}}/runs/{{suite_id}}/{{run_id}}"
 request = Request(url, method="POST")
 with urlopen(request, timeout=120) as response:
-    print(f"review_open_status={{response.status}} url={{response.geturl()}}")
+    print(f"review_open_status={{response.status}} url={{public_url}}")
 PY
   else
     status=1

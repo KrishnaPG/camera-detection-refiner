@@ -23,23 +23,30 @@ services:
           /tmp/handdetect/replays
         export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
         exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
-          python -m handdetect.cli.main workbench serve --host 0.0.0.0 --port 8000
+          python -m handdetect.cli.main workbench serve \
+            --host "$$HANDDETECT_CONTAINER_BIND_HOST" \
+            --port "$$HANDDETECT_WORKBENCH_CONTAINER_PORT"
     environment:
       HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
       HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+      HANDDETECT_CONTAINER_BIND_HOST: "${HANDDETECT_CONTAINER_BIND_HOST}"
+      HANDDETECT_WORKBENCH_CONTAINER_PORT: "${HANDDETECT_WORKBENCH_CONTAINER_PORT}"
+      HANDDETECT_WORKBENCH_INTERNAL_URL: "http://${HANDDETECT_LOOPBACK_HOST}:${HANDDETECT_WORKBENCH_CONTAINER_PORT}"
+      HANDDETECT_WORKBENCH_PUBLIC_URL: "${HANDDETECT_WORKBENCH_PUBLIC_URL}"
+      HANDDETECT_MLFLOW_PUBLIC_URL: "${HANDDETECT_MLFLOW_PUBLIC_URL}"
       HANDDETECT_RUNS_ROOT: "/tmp/handdetect/runs"
       HANDDETECT_MAX_RUNTIME_BYTES: "${HANDDETECT_MAX_RUNTIME_BYTES:-21474836480}"
       HANDDETECT_MIN_FREE_BYTES: "${HANDDETECT_MIN_FREE_BYTES:-5368709120}"
       HANDDETECT_KEEP_SUITES: "${HANDDETECT_KEEP_SUITES:-5}"
       HANDDETECT_SELECTED_DATA_SNAPSHOT_MAX_BYTES: "${HANDDETECT_SELECTED_DATA_SNAPSHOT_MAX_BYTES:-1073741824}"
-      HANDDETECT_LABEL_STUDIO_URL: "http://label-studio:8080"
-      HANDDETECT_LABEL_STUDIO_PUBLIC_URL: "http://localhost:8080"
+      HANDDETECT_LABEL_STUDIO_URL: "http://label-studio:${HANDDETECT_LABEL_STUDIO_CONTAINER_PORT}"
+      HANDDETECT_LABEL_STUDIO_PUBLIC_URL: "${HANDDETECT_LABEL_STUDIO_PUBLIC_URL}"
       HANDDETECT_LABEL_STUDIO_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
-      HANDDETECT_FIFTYONE_PUBLIC_URL: "http://localhost:5151"
-      FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:27017/fiftyone"
+      HANDDETECT_FIFTYONE_PUBLIC_URL: "${HANDDETECT_FIFTYONE_PUBLIC_URL}"
+      FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:${HANDDETECT_FIFTYONE_MONGO_CONTAINER_PORT}/fiftyone"
       GIT_PYTHON_REFRESH: "quiet"
     ports:
-      - "8000:8000"
+      - "${HANDDETECT_BIND_HOST}:${HANDDETECT_WORKBENCH_HOST_PORT}:${HANDDETECT_WORKBENCH_CONTAINER_PORT}"
     volumes:
       - ./data:/workspace/data:ro
       - /tmp/handdetect:/tmp/handdetect
@@ -64,14 +71,18 @@ services:
           /tmp/handdetect/mlruns
         export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
         exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
-          mlflow ui --backend-store-uri file:/tmp/handdetect/mlruns --host 0.0.0.0 --port 5000
+          mlflow ui --backend-store-uri file:/tmp/handdetect/mlruns \
+            --host "$$HANDDETECT_CONTAINER_BIND_HOST" \
+            --port "$$HANDDETECT_MLFLOW_CONTAINER_PORT"
     environment:
       MLFLOW_ALLOW_FILE_STORE: "true"
       GIT_PYTHON_REFRESH: "quiet"
       HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
       HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+      HANDDETECT_CONTAINER_BIND_HOST: "${HANDDETECT_CONTAINER_BIND_HOST}"
+      HANDDETECT_MLFLOW_CONTAINER_PORT: "${HANDDETECT_MLFLOW_CONTAINER_PORT}"
     ports:
-      - "5000:5000"
+      - "${HANDDETECT_BIND_HOST}:${HANDDETECT_MLFLOW_HOST_PORT}:${HANDDETECT_MLFLOW_CONTAINER_PORT}"
     volumes:
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace
@@ -111,13 +122,18 @@ services:
           /tmp/handdetect/cache
         export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
         exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
-          fiftyone app launch --address 0.0.0.0 --port 5151 --remote --wait -1
+          fiftyone app launch \
+            --address "$$HANDDETECT_CONTAINER_BIND_HOST" \
+            --port "$$HANDDETECT_FIFTYONE_CONTAINER_PORT" \
+            --remote --wait -1
     environment:
       HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
       HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
-      FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:27017/fiftyone"
+      HANDDETECT_CONTAINER_BIND_HOST: "${HANDDETECT_CONTAINER_BIND_HOST}"
+      HANDDETECT_FIFTYONE_CONTAINER_PORT: "${HANDDETECT_FIFTYONE_CONTAINER_PORT}"
+      FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:${HANDDETECT_FIFTYONE_MONGO_CONTAINER_PORT}/fiftyone"
     ports:
-      - "5151:5151"
+      - "${HANDDETECT_BIND_HOST}:${HANDDETECT_FIFTYONE_HOST_PORT}:${HANDDETECT_FIFTYONE_CONTAINER_PORT}"
     volumes:
       - /tmp/handdetect:/tmp/handdetect
     working_dir: /workspace
@@ -138,9 +154,9 @@ services:
         start_label_studio() {
           /label-studio/.venv/bin/label-studio start \
             --no-browser \
-            --internal-host 0.0.0.0 \
-            --port 8080 \
-            --host http://localhost:8080 \
+            --internal-host "$$HANDDETECT_CONTAINER_BIND_HOST" \
+            --port "$$HANDDETECT_LABEL_STUDIO_CONTAINER_PORT" \
+            --host "$$HANDDETECT_LABEL_STUDIO_PUBLIC_URL" \
             --username "$$LABEL_STUDIO_USERNAME" \
             --password "$$LABEL_STUDIO_PASSWORD" \
             --user-token "$$LABEL_STUDIO_USER_TOKEN" \
@@ -150,7 +166,7 @@ services:
 
         enable_legacy_api_tokens_after_start() {
           for attempt in $$(seq 1 60); do
-            if curl -fsS -o /dev/null http://127.0.0.1:8080/; then
+            if curl -fsS -o /dev/null "http://$$HANDDETECT_LOOPBACK_HOST:$$HANDDETECT_LABEL_STUDIO_CONTAINER_PORT/"; then
               if printf '%s\n' \
                 'from jwt_auth.models import JWTSettings' \
                 'updated = JWTSettings.objects.update(legacy_api_tokens_enabled=True)' \
@@ -191,8 +207,12 @@ services:
       LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN: "true"
       LABEL_STUDIO_BASE_DATA_DIR: "/label-studio/data"
       LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK: "true"
+      HANDDETECT_CONTAINER_BIND_HOST: "${HANDDETECT_CONTAINER_BIND_HOST}"
+      HANDDETECT_LOOPBACK_HOST: "${HANDDETECT_LOOPBACK_HOST}"
+      HANDDETECT_LABEL_STUDIO_CONTAINER_PORT: "${HANDDETECT_LABEL_STUDIO_CONTAINER_PORT}"
+      HANDDETECT_LABEL_STUDIO_PUBLIC_URL: "${HANDDETECT_LABEL_STUDIO_PUBLIC_URL}"
       HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS: "${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}"
     ports:
-      - "8080:8080"
+      - "${HANDDETECT_BIND_HOST}:${HANDDETECT_LABEL_STUDIO_HOST_PORT}:${HANDDETECT_LABEL_STUDIO_CONTAINER_PORT}"
     volumes:
       - /tmp/handdetect-services/label-studio:/label-studio/data

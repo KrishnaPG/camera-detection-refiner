@@ -31,13 +31,13 @@ class ReviewJourneyLauncher:
             run_id=run_id,
             report=ReviewPlatformStatus(
                 status="ready",
-                url=f"http://localhost:{runtime.workbench_port}/artifacts/{suite_id}/{run_id}/report/index.html",
+                url=f"{self._workbench_url(runtime)}/artifacts/{suite_id}/{run_id}/report/index.html",
                 path=run_root / "report" / "index.html",
                 message="Static report hub",
             ),
             mlflow=ReviewPlatformStatus(
                 status="ready",
-                url=tracking["mlflow"].get("url") or "http://localhost:5000",
+                url=tracking["mlflow"].get("url") or runtime.mlflow_public_url or None,
                 path=Path(tracking["mlflow"]["path"]),
                 message="MLflow run tracking",
             ),
@@ -49,7 +49,7 @@ class ReviewJourneyLauncher:
             ),
             evidently=ReviewPlatformStatus(
                 status="ready" if tracking["evidently"].get("status") == "exported" else "degraded",
-                url=f"http://localhost:{runtime.workbench_port}/artifacts/{suite_id}/{run_id}/report/evidently.html",
+                url=f"{self._workbench_url(runtime)}/artifacts/{suite_id}/{run_id}/report/evidently.html",
                 path=Path(tracking["evidently"]["path"]),
                 message=tracking["evidently"].get("error") or "Evidently report",
             ),
@@ -68,6 +68,11 @@ class ReviewJourneyLauncher:
         output.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
         StaticReportBuilder().build(run_root)
         return manifest
+
+    def _workbench_url(self, runtime: RuntimeConfig) -> str:
+        if runtime.workbench_public_url:
+            return runtime.workbench_public_url.rstrip("/")
+        return f"http://{runtime.workbench_host}:{runtime.workbench_port}"
 
     def _label_studio_status(self, runtime: RuntimeConfig, run_root: Path) -> ReviewPlatformStatus:
         tasks_path = run_root / "review" / "labelstudio-tasks.json"
