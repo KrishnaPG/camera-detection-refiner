@@ -1,3 +1,6 @@
+include:
+  - path: ./infra/cvat/docker-compose.yml
+
 services:
   workbench:
     image: handdetect-app:local
@@ -8,9 +11,9 @@ services:
         HANDDETECT_BUILD_COMMIT: "${HANDDETECT_BUILD_COMMIT:-local-image}"
     command:
       - bash
-      - -lc
+      - -c
       - |
-        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/runs /tmp/handdetect/evidently /tmp/handdetect/workbench /tmp/handdetect/replays
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns /tmp/handdetect/dvclive /tmp/handdetect/runs /tmp/handdetect/evidently /tmp/handdetect/workbench /tmp/handdetect/replays /berg10/external-tables
         chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
         chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
           /tmp/handdetect/home \
@@ -20,7 +23,8 @@ services:
           /tmp/handdetect/runs \
           /tmp/handdetect/evidently \
           /tmp/handdetect/workbench \
-          /tmp/handdetect/replays
+          /tmp/handdetect/replays \
+          /berg10/external-tables
         export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
         exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
           python -m handdetect.cli.main workbench serve \
@@ -33,6 +37,13 @@ services:
       HANDDETECT_WORKBENCH_CONTAINER_PORT: "${HANDDETECT_WORKBENCH_CONTAINER_PORT}"
       HANDDETECT_WORKBENCH_INTERNAL_URL: "http://${HANDDETECT_LOOPBACK_HOST}:${HANDDETECT_WORKBENCH_CONTAINER_PORT}"
       HANDDETECT_WORKBENCH_PUBLIC_URL: "${HANDDETECT_WORKBENCH_PUBLIC_URL}"
+      HANDDETECT_BIODOCK_PUBLIC_URL: "${HANDDETECT_BIODOCK_PUBLIC_URL:-}"
+      HANDDETECT_BIODOCK_RPC_URL: "${HANDDETECT_BIODOCK_RPC_URL:-}"
+      HANDDETECT_BIODOCK_ACCESS_TOKEN: "${HANDDETECT_BIODOCK_ACCESS_TOKEN:-}"
+      HANDDETECT_BIODOCK_TOKEN_URL: "${HANDDETECT_BIODOCK_TOKEN_URL:-}"
+      HANDDETECT_BIODOCK_CLIENT_ID: "${HANDDETECT_BIODOCK_CLIENT_ID:-}"
+      HANDDETECT_BIODOCK_CLIENT_SECRET: "${HANDDETECT_BIODOCK_CLIENT_SECRET:-}"
+      HANDDETECT_BIODOCK_EXTERNAL_TABLE_ROOT: "/berg10/external-tables"
       HANDDETECT_MLFLOW_PUBLIC_URL: "${HANDDETECT_MLFLOW_PUBLIC_URL}"
       HANDDETECT_EVIDENTLY_PUBLIC_URL: "${HANDDETECT_EVIDENTLY_PUBLIC_URL}"
       HANDDETECT_RUNS_ROOT: "/tmp/handdetect/runs"
@@ -45,6 +56,11 @@ services:
       HANDDETECT_LABEL_STUDIO_TOKEN: "${HANDDETECT_LABEL_STUDIO_TOKEN:-handdetect-local-token}"
       HANDDETECT_FIFTYONE_PUBLIC_URL: "${HANDDETECT_FIFTYONE_PUBLIC_URL}"
       HANDDETECT_CVAT_PUBLIC_URL: "${HANDDETECT_CVAT_PUBLIC_URL:-}"
+      HANDDETECT_CVAT_URL: "${HANDDETECT_CVAT_URL:-}"
+      HANDDETECT_CVAT_USERNAME: "${HANDDETECT_CVAT_USERNAME:-}"
+      HANDDETECT_CVAT_PASSWORD: "${HANDDETECT_CVAT_PASSWORD:-}"
+      HANDDETECT_DATUMARO_URL: "http://datumaro-exporter:${HANDDETECT_DATUMARO_CONTAINER_PORT}"
+      HANDDETECT_RERUN_PUBLIC_URL: "${HANDDETECT_RERUN_PUBLIC_URL:-}"
       FIFTYONE_DATABASE_URI: "mongodb://fiftyone-mongo:${HANDDETECT_FIFTYONE_MONGO_CONTAINER_PORT}/fiftyone"
       GIT_PYTHON_REFRESH: "quiet"
     ports:
@@ -52,18 +68,21 @@ services:
     volumes:
       - ./data:/workspace/data:ro
       - /tmp/handdetect:/tmp/handdetect
+      - ${BIODOCK_DATA_ROOT:-/home/ubuntu/data}/biodock-berg10-state-server/blobs/external_tables:/berg10/external-tables
     working_dir: /workspace
     depends_on:
       fiftyone-mongo:
         condition: service_healthy
       label-studio:
         condition: service_started
+      datumaro-exporter:
+        condition: service_started
 
   mlflow:
     image: handdetect-app:local
     command:
       - bash
-      - -lc
+      - -c
       - |
         mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/mlruns
         chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
@@ -93,7 +112,7 @@ services:
     image: handdetect-app:local
     command:
       - bash
-      - -lc
+      - -c
       - |
         mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/evidently
         chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
@@ -122,7 +141,7 @@ services:
     user: "0:0"
     command:
       - sh
-      - -lc
+      - -c
       - |
         find /data/db -mindepth 1 -maxdepth 1 -mtime +"$${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}" -exec rm -rf {} +
         exec mongod --quiet --dbpath /data/db --bind_ip_all
@@ -143,7 +162,7 @@ services:
     image: handdetect-app:local
     command:
       - bash
-      - -lc
+      - -c
       - |
         mkdir -p /tmp/handdetect/home /tmp/handdetect/cache
         chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
@@ -176,7 +195,7 @@ services:
     user: "0:0"
     command:
       - bash
-      - -lc
+      - -c
       - |
         set -o pipefail
         find /label-studio/data -mindepth 1 -maxdepth 1 -mtime +"$${HANDDETECT_SERVICE_STATE_MAX_AGE_DAYS:-14}" -exec rm -rf {} +
@@ -246,3 +265,48 @@ services:
       - "${HANDDETECT_BIND_HOST}:${HANDDETECT_LABEL_STUDIO_HOST_PORT}:${HANDDETECT_LABEL_STUDIO_CONTAINER_PORT}"
     volumes:
       - /tmp/handdetect-services/label-studio:/label-studio/data
+
+  rerun:
+    image: handdetect-app:local
+    command:
+      - bash
+      - -c
+      - |
+        mkdir -p /tmp/handdetect/home /tmp/handdetect/cache /tmp/handdetect/rerun
+        chown "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" /tmp/handdetect
+        chown -R "$$HANDDETECT_COMPOSE_UID:$$HANDDETECT_COMPOSE_GID" \
+          /tmp/handdetect/home \
+          /tmp/handdetect/cache \
+          /tmp/handdetect/rerun
+        export HOME=/tmp/handdetect/home XDG_CACHE_HOME=/tmp/handdetect/cache USER=handdetect LOGNAME=handdetect
+        exec setpriv --reuid="$$HANDDETECT_COMPOSE_UID" --regid="$$HANDDETECT_COMPOSE_GID" --clear-groups \
+          rerun --web-viewer --serve-web \
+            --bind "$$HANDDETECT_CONTAINER_BIND_HOST" \
+            --web-viewer-port "$$HANDDETECT_RERUN_WEB_CONTAINER_PORT" \
+            --port "$$HANDDETECT_RERUN_GRPC_CONTAINER_PORT" \
+            --server-memory-limit 2GiB \
+            --hide-welcome-screen
+    environment:
+      HANDDETECT_COMPOSE_UID: "${HANDDETECT_COMPOSE_UID:-1000}"
+      HANDDETECT_COMPOSE_GID: "${HANDDETECT_COMPOSE_GID:-1000}"
+      HANDDETECT_CONTAINER_BIND_HOST: "${HANDDETECT_CONTAINER_BIND_HOST}"
+      HANDDETECT_RERUN_WEB_CONTAINER_PORT: "${HANDDETECT_RERUN_WEB_CONTAINER_PORT}"
+      HANDDETECT_RERUN_GRPC_CONTAINER_PORT: "${HANDDETECT_RERUN_GRPC_CONTAINER_PORT}"
+    ports:
+      - "${HANDDETECT_BIND_HOST}:${HANDDETECT_RERUN_HOST_PORT}:${HANDDETECT_RERUN_WEB_CONTAINER_PORT}"
+    volumes:
+      - /tmp/handdetect:/tmp/handdetect
+    working_dir: /workspace
+
+  datumaro-exporter:
+    image: handdetect-datumaro-exporter:local
+    build:
+      context: ./infra/datumaro
+      dockerfile: Dockerfile
+    environment:
+      HANDDETECT_DATUMARO_BIND_HOST: "${HANDDETECT_CONTAINER_BIND_HOST}"
+      HANDDETECT_DATUMARO_CONTAINER_PORT: "${HANDDETECT_DATUMARO_CONTAINER_PORT}"
+      HANDDETECT_RUNS_ROOT: "/tmp/handdetect/runs"
+    volumes:
+      - /tmp/handdetect:/tmp/handdetect
+    restart: always

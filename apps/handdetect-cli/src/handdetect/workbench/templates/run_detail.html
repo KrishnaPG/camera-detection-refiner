@@ -6,33 +6,35 @@
   </head>
   <body>
     <h1>{{ suite_id }}/{{ run_id }}</h1>
-    <p><a href="/">Back to runs</a></p>
+    <p><a href="/" target="_blank" rel="noopener noreferrer">Back to runs</a></p>
     <h2>Primary Links</h2>
     <ul>
       {% if platforms %}
-      <li><a href="{{ platforms.report.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/index.html') }}">Static report</a></li>
-      <li><a href="/runs/{{ suite_id }}/{{ run_id }}/story">Local Story Review</a></li>
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html">Visual review</a></li>
-      <li>MLflow UI{% if platforms.mlflow.url %}: <a href="{{ platforms.mlflow.url }}">{{ platforms.mlflow.url }}</a>{% endif %}</li>
-      <li><a href="{{ platforms.evidently.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/evidently.html') }}">Evidently report</a></li>
-      <li><a href="{{ platforms.fiftyone.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/fiftyone-dataset.json') }}">FiftyOne</a></li>
-      <li><a href="{{ platforms.label_studio.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/labelstudio-tasks.json') }}">Label Studio</a></li>
-      <li><a href="{{ platforms.cvat.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/cvat-handoff.json') }}">CVAT</a></li>
-      <li><a href="{{ platforms.datumaro.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/datumaro-handoff.json') }}">Datumaro</a></li>
-      <li><a href="{{ platforms.rerun.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/rerun-handoff.json') }}">Rerun</a></li>
+      <li><a href="{{ platforms.report.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/index.html') }}" target="_blank" rel="noopener noreferrer">Static report</a></li>
+      <li><a href="/runs/{{ suite_id }}/{{ run_id }}/story" target="_blank" rel="noopener noreferrer">Local Story Review</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html" target="_blank" rel="noopener noreferrer">Visual review</a></li>
+      <li>BioDock Berg10{% if platforms.biodock.url %}: <a href="{{ platforms.biodock.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.biodock.url }}</a>{% endif %}</li>
+      <li>MLflow UI{% if platforms.mlflow.url %}: <a href="{{ platforms.mlflow.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.mlflow.url }}</a>{% endif %}</li>
+      <li><a href="{{ platforms.evidently.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/report/evidently.html') }}" target="_blank" rel="noopener noreferrer">Evidently report</a></li>
+      <li><a href="{{ platforms.fiftyone.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/fiftyone-dataset.json') }}" target="_blank" rel="noopener noreferrer">FiftyOne</a></li>
+      <li><a href="{{ platforms.label_studio.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/labelstudio-tasks.json') }}" target="_blank" rel="noopener noreferrer">Label Studio</a></li>
+      <li><a href="{{ platforms.cvat.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/cvat-handoff.json') }}" target="_blank" rel="noopener noreferrer">CVAT</a></li>
+      <li><a href="{{ platforms.datumaro.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/datumaro-handoff.json') }}" target="_blank" rel="noopener noreferrer">Datumaro</a></li>
+      <li><a href="{{ platforms.rerun.url or ('/artifacts/' ~ suite_id ~ '/' ~ run_id ~ '/review/rerun-handoff.json') }}" target="_blank" rel="noopener noreferrer">Rerun</a></li>
       {% else %}
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/index.html">Static report</a></li>
-      <li><a href="/runs/{{ suite_id }}/{{ run_id }}/story">Local Story Review</a></li>
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html">Visual review</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/index.html" target="_blank" rel="noopener noreferrer">Static report</a></li>
+      <li><a href="/runs/{{ suite_id }}/{{ run_id }}/story" target="_blank" rel="noopener noreferrer">Local Story Review</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html" target="_blank" rel="noopener noreferrer">Visual review</a></li>
+      <li>BioDock Berg10</li>
       <li>MLflow UI</li>
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/evidently.html">Evidently report</a></li>
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/fiftyone-dataset.json">FiftyOne dataset manifest</a></li>
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/labelstudio-tasks.json">Label Studio tasks</a></li>
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/cvat-handoff.json">CVAT handoff</a></li>
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/datumaro-handoff.json">Datumaro handoff</a></li>
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/rerun-handoff.json">Rerun handoff</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/report/evidently.html" target="_blank" rel="noopener noreferrer">Evidently report</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/fiftyone-dataset.json" target="_blank" rel="noopener noreferrer">FiftyOne dataset manifest</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/labelstudio-tasks.json" target="_blank" rel="noopener noreferrer">Label Studio tasks</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/cvat-handoff.json" target="_blank" rel="noopener noreferrer">CVAT handoff</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/datumaro-handoff.json" target="_blank" rel="noopener noreferrer">Datumaro handoff</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/review/rerun-handoff.json" target="_blank" rel="noopener noreferrer">Rerun handoff</a></li>
       {% endif %}
-      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/lineage/replay.lock.json">Replay lock</a></li>
+      <li><a href="/artifacts/{{ suite_id }}/{{ run_id }}/lineage/replay.lock.json" target="_blank" rel="noopener noreferrer">Replay lock</a></li>
     </ul>
     <form method="post" action="/runs/{{ suite_id }}/{{ run_id }}/review/open">
       <button type="submit">Open Review Platforms</button>
@@ -52,14 +54,15 @@
     {% if platforms %}
     <h2>Platforms</h2>
     <ul>
-      <li>MLflow: {{ platforms.mlflow.status }} {% if platforms.mlflow.url %}<a href="{{ platforms.mlflow.url }}">{{ platforms.mlflow.url }}</a>{% endif %}</li>
+      <li>BioDock Berg10: {{ platforms.biodock.status }} {% if platforms.biodock.url %}<a href="{{ platforms.biodock.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.biodock.url }}</a>{% endif %}</li>
+      <li>MLflow: {{ platforms.mlflow.status }} {% if platforms.mlflow.url %}<a href="{{ platforms.mlflow.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.mlflow.url }}</a>{% endif %}</li>
       <li>DVC: {{ platforms.dvc.status }} {{ platforms.dvc.path }}</li>
-      <li>Evidently: {{ platforms.evidently.status }} {% if platforms.evidently.url %}<a href="{{ platforms.evidently.url }}">{{ platforms.evidently.url }}</a>{% endif %}</li>
-      <li>FiftyOne: {{ platforms.fiftyone.status }} {% if platforms.fiftyone.url %}<a href="{{ platforms.fiftyone.url }}">{{ platforms.fiftyone.url }}</a>{% endif %}</li>
-      <li>Label Studio: {{ platforms.label_studio.status }} {% if platforms.label_studio.url %}<a href="{{ platforms.label_studio.url }}">{{ platforms.label_studio.url }}</a>{% endif %}</li>
-      <li>CVAT: {{ platforms.cvat.status }} {% if platforms.cvat.url %}<a href="{{ platforms.cvat.url }}">{{ platforms.cvat.url }}</a>{% endif %}</li>
-      <li>Datumaro: {{ platforms.datumaro.status }} {% if platforms.datumaro.url %}<a href="{{ platforms.datumaro.url }}">{{ platforms.datumaro.url }}</a>{% endif %}</li>
-      <li>Rerun: {{ platforms.rerun.status }} {% if platforms.rerun.url %}<a href="{{ platforms.rerun.url }}">{{ platforms.rerun.url }}</a>{% endif %}</li>
+      <li>Evidently: {{ platforms.evidently.status }} {% if platforms.evidently.url %}<a href="{{ platforms.evidently.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.evidently.url }}</a>{% endif %}</li>
+      <li>FiftyOne: {{ platforms.fiftyone.status }} {% if platforms.fiftyone.url %}<a href="{{ platforms.fiftyone.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.fiftyone.url }}</a>{% endif %}</li>
+      <li>Label Studio: {{ platforms.label_studio.status }} {% if platforms.label_studio.url %}<a href="{{ platforms.label_studio.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.label_studio.url }}</a>{% endif %}</li>
+      <li>CVAT: {{ platforms.cvat.status }} {% if platforms.cvat.url %}<a href="{{ platforms.cvat.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.cvat.url }}</a>{% endif %}</li>
+      <li>Datumaro: {{ platforms.datumaro.status }} {% if platforms.datumaro.url %}<a href="{{ platforms.datumaro.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.datumaro.url }}</a>{% endif %}</li>
+      <li>Rerun: {{ platforms.rerun.status }} {% if platforms.rerun.url %}<a href="{{ platforms.rerun.url }}" target="_blank" rel="noopener noreferrer">{{ platforms.rerun.url }}</a>{% endif %}</li>
     </ul>
     <pre>{{ platforms | tojson(indent=2) }}</pre>
     {% endif %}

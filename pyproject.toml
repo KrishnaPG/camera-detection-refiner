@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "ByteTrack-backed hand detection quality workbench"
 requires-python = ">=3.12"
 dependencies = [
+  "cvat-sdk==2.71.0",
   "dvc==3.67.1",
   "dvclive==3.49.1",
   "evidently==0.7.21",
@@ -26,6 +27,7 @@ dependencies = [
   "pyarrow==25.0.0",
   "pydantic==2.13.4",
   "pyyaml==6.0.3",
+  "rerun-sdk==0.35.0",
   "python-multipart==0.0.32",
   "starlette==0.46.2",
   "structlog==26.1.0",
@@ -34,6 +36,7 @@ dependencies = [
   "trackers==2.6.0",
   "typer==0.27.1",
   "uvicorn==0.52.1",
+  "websockets==16.0",
 ]
 
 [project.optional-dependencies]

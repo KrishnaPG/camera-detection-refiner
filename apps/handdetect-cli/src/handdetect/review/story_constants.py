@@ -91,6 +91,7 @@ SUPPORT_ROWS = (
 
 PLATFORM_LABELS = {
     "report": "Static Report",
+    "biodock": "BioDock Berg10",
     "mlflow": "MLflow",
     "dvc": "DVC/DVCLive",
     "evidently": "Evidently",

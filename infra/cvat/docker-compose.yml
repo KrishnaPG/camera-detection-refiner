@@ -1,0 +1,361 @@
+x-cvat-backend-env: &cvat-backend-env
+  CVAT_POSTGRES_HOST: cvat-db
+  CVAT_REDIS_INMEM_HOST: cvat-redis-inmem
+  CVAT_REDIS_INMEM_PORT: "${HANDDETECT_CVAT_REDIS_INMEM_CONTAINER_PORT}"
+  CVAT_REDIS_ONDISK_HOST: cvat-redis-ondisk
+  CVAT_REDIS_ONDISK_PORT: "${HANDDETECT_CVAT_REDIS_ONDISK_CONTAINER_PORT}"
+  CVAT_LOG_IMPORT_ERRORS: "true"
+  CVAT_ALLOW_STATIC_CACHE: "no"
+  CVAT_NUM_PROXIES: "1"
+  DJANGO_LOG_SERVER_HOST: cvat-vector
+  DJANGO_LOG_SERVER_PORT: "${HANDDETECT_CVAT_GRPC_CONTAINER_PORT}"
+  SMOKESCREEN_OPTS: ""
+  no_proxy: "cvat-clickhouse,cvat-grafana,cvat-vector,cvat-opa,${no_proxy:-}"
+
+x-cvat-clickhouse-env: &cvat-clickhouse-env
+  CLICKHOUSE_HOST: cvat-clickhouse
+  CLICKHOUSE_PORT: "${HANDDETECT_CVAT_CLICKHOUSE_CONTAINER_PORT}"
+  CLICKHOUSE_DB: cvat
+  CLICKHOUSE_USER: user
+  CLICKHOUSE_PASSWORD: user
+
+x-cvat-backend-deps: &cvat-backend-deps
+  cvat-init:
+    condition: service_completed_successfully
+  cvat-db:
+    condition: service_started
+  cvat-redis-inmem:
+    condition: service_started
+  cvat-redis-ondisk:
+    condition: service_started
+  cvat-clickhouse:
+    condition: service_started
+
+services:
+  cvat-init:
+    image: apache/kvrocks:2.15.0
+    restart: "no"
+    user: "0:0"
+    entrypoint:
+      - sh
+      - -lc
+    command:
+      - |
+        set -eu
+        mkdir -p /state/data /state/keys /state/logs /state/redis-ondisk
+        if [ ! -f /state/redis-ondisk/kvrocks.conf ]; then
+          cp /var/lib/kvrocks/kvrocks.conf /state/redis-ondisk/kvrocks.conf
+        fi
+        chown -R 1000:1000 /state/data /state/keys /state/logs
+        chown -R 999:999 /state/redis-ondisk
+        chmod 755 /state/data /state/keys /state/logs /state/redis-ondisk
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/state/data
+      - /tmp/handdetect-services/cvat/keys:/state/keys
+      - /tmp/handdetect-services/cvat/logs:/state/logs
+      - /tmp/handdetect-services/cvat/redis-ondisk:/state/redis-ondisk
+
+  cvat-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_DB: cvat
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - /tmp/handdetect-services/cvat/postgres:/var/lib/postgresql/data
+
+  cvat-redis-inmem:
+    image: redis:7.2.11-alpine
+    restart: always
+    command:
+      - redis-server
+      - --save
+      - "60"
+      - "100"
+      - --appendonly
+      - "yes"
+    volumes:
+      - /tmp/handdetect-services/cvat/redis-inmem:/data
+
+  cvat-redis-ondisk:
+    image: apache/kvrocks:2.15.0
+    restart: always
+    init: true
+    depends_on:
+      cvat-init:
+        condition: service_completed_successfully
+    command:
+      - -c
+      - /var/lib/kvrocks/kvrocks.conf
+      - --compact-cron
+      - "0 3 * * *"
+    volumes:
+      - /tmp/handdetect-services/cvat/redis-ondisk:/var/lib/kvrocks
+
+  cvat-clickhouse:
+    image: clickhouse/clickhouse-server:23.11-alpine
+    restart: always
+    environment:
+      <<: *cvat-clickhouse-env
+    volumes:
+      - /tmp/handdetect-services/cvat/clickhouse:/var/lib/clickhouse
+
+  cvat-vector:
+    image: timberio/vector:0.26.0-alpine
+    restart: always
+    user: "1000:1000"
+    depends_on:
+      - cvat-clickhouse
+    environment:
+      <<: *cvat-clickhouse-env
+      HANDDETECT_CVAT_GRPC_CONTAINER_PORT: "${HANDDETECT_CVAT_GRPC_CONTAINER_PORT}"
+    volumes:
+      - ./components/analytics/vector/vector.toml:/etc/vector/vector.toml:ro
+      - type: tmpfs
+        target: /vector-data-dir
+
+  cvat-opa:
+    image: openpolicyagent/opa:1.12.2
+    restart: always
+    command:
+      - run
+      - --server
+      - --addr=:${HANDDETECT_CVAT_OPA_CONTAINER_PORT}
+      - --log-level=error
+      - --set=services.cvat.url=http://cvat-server:${HANDDETECT_CVAT_SERVER_CONTAINER_PORT}
+      - --set=bundles.cvat.service=cvat
+      - --set=bundles.cvat.resource=/api/auth/rules
+      - --set=bundles.cvat.polling.min_delay_seconds=5
+      - --set=bundles.cvat.polling.max_delay_seconds=15
+    networks:
+      default:
+        aliases:
+          - opa
+
+  cvat-server:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on:
+      <<: *cvat-backend-deps
+      cvat-opa:
+        condition: service_started
+    command: init run server nginx
+    environment:
+      <<: [*cvat-backend-env, *cvat-clickhouse-env]
+      DJANGO_MODWSGI_EXTRA_ARGS: ""
+      ALLOWED_HOSTS: "*"
+      ADAPTIVE_AUTO_ANNOTATION: "false"
+      NUMPROCS: "2"
+      CVAT_ANALYTICS: "1"
+      CVAT_BASE_URL: "${HANDDETECT_CVAT_PUBLIC_URL}"
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.cvat.loadbalancer.server.port: "${HANDDETECT_CVAT_SERVER_CONTAINER_PORT}"
+      traefik.http.routers.cvat.rule: "Host(`${CVAT_HOST}`) && (PathPrefix(`/api/`) || PathPrefix(`/static/`) || PathPrefix(`/admin`) || PathPrefix(`/django-rq`))"
+      traefik.http.routers.cvat.entrypoints: cvat-web
+    networks:
+      default:
+        aliases:
+          - cvat-server
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-worker-utils:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on: *cvat-backend-deps
+    command: run worker notifications cleaning
+    environment:
+      <<: *cvat-backend-env
+      CVAT_REDIS_INMEM_PASSWORD: ""
+      NUMPROCS: "1"
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-worker-import:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on: *cvat-backend-deps
+    command: run worker import
+    environment:
+      <<: *cvat-backend-env
+      NUMPROCS: "2"
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-worker-export:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on: *cvat-backend-deps
+    command: run worker export
+    environment:
+      <<: [*cvat-backend-env, *cvat-clickhouse-env]
+      NUMPROCS: "2"
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-worker-annotation:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on: *cvat-backend-deps
+    command: run worker annotation
+    environment:
+      <<: *cvat-backend-env
+      NUMPROCS: "1"
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-worker-webhooks:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on: *cvat-backend-deps
+    command: run worker webhooks --with-scheduler
+    environment:
+      <<: *cvat-backend-env
+      NUMPROCS: "1"
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-worker-quality-reports:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on: *cvat-backend-deps
+    command: run worker quality_reports
+    environment:
+      <<: *cvat-backend-env
+      NUMPROCS: "1"
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-worker-chunks:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on: *cvat-backend-deps
+    command: run worker chunks
+    environment:
+      <<: *cvat-backend-env
+      NUMPROCS: "2"
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-worker-consensus:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on: *cvat-backend-deps
+    command: run worker consensus
+    environment:
+      <<: *cvat-backend-env
+      NUMPROCS: "1"
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs
+
+  cvat-ui:
+    image: cvat/ui:${CVAT_VERSION:-v2.72.0}
+    restart: always
+    depends_on:
+      - cvat-server
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.cvat-ui.loadbalancer.server.port: "${HANDDETECT_CVAT_UI_CONTAINER_PORT}"
+      traefik.http.routers.cvat-ui.rule: "Host(`${CVAT_HOST}`)"
+      traefik.http.routers.cvat-ui.entrypoints: cvat-web
+
+  cvat-grafana:
+    image: grafana/grafana-oss:10.1.2
+    restart: always
+    depends_on:
+      - cvat-clickhouse
+    environment:
+      <<: *cvat-clickhouse-env
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_SERVER_ROOT_URL: "${HANDDETECT_CVAT_PUBLIC_URL}/analytics"
+      GF_INSTALL_PLUGINS: "grafana-clickhouse-datasource 4.8.2"
+    networks:
+      default:
+        aliases:
+          - cvat-grafana
+
+  cvat-traefik:
+    image: traefik:v3.6
+    restart: always
+    depends_on:
+      - cvat-server
+      - cvat-ui
+    environment:
+      CVAT_HOST: "${CVAT_HOST}"
+      DJANGO_LOG_VIEWER_HOST: cvat-grafana
+      DJANGO_LOG_VIEWER_PORT: "${HANDDETECT_CVAT_GRAFANA_CONTAINER_PORT}"
+      TRAEFIK_ACCESSLOG_FORMAT: json
+      TRAEFIK_ACCESSLOG_FIELDS_DEFAULTMODE: drop
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_ClientHost: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_DownstreamContentSize: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_DownstreamStatus: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_Duration: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_RequestHost: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_RequestMethod: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_RequestPath: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_RequestPort: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_RequestProtocol: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_RouterName: keep
+      TRAEFIK_ACCESSLOG_FIELDS_NAMES_StartUTC: keep
+      TRAEFIK_LOG_FORMAT: json
+      TRAEFIK_ENTRYPOINTS_cvat-web_ADDRESS: ":${HANDDETECT_CVAT_SERVER_CONTAINER_PORT}"
+      TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT: "false"
+      TRAEFIK_PROVIDERS_DOCKER_NETWORK: "${COMPOSE_PROJECT_NAME:-hand-detect}_default"
+      TRAEFIK_PROVIDERS_FILE_DIRECTORY: /etc/traefik/rules
+    ports:
+      - "${HANDDETECT_BIND_HOST}:${HANDDETECT_CVAT_HOST_PORT}:${HANDDETECT_CVAT_SERVER_CONTAINER_PORT}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./components/analytics/grafana_conf.yml:/etc/traefik/rules/grafana_conf.yml:ro
+
+  cvat-bootstrap:
+    image: cvat/server:${CVAT_VERSION:-v2.72.0}
+    restart: "no"
+    depends_on:
+      cvat-server:
+        condition: service_started
+    environment:
+      <<: [*cvat-backend-env, *cvat-clickhouse-env]
+      HANDDETECT_CVAT_USERNAME: "${HANDDETECT_CVAT_USERNAME}"
+      HANDDETECT_CVAT_PASSWORD: "${HANDDETECT_CVAT_PASSWORD}"
+      HANDDETECT_CVAT_EMAIL: "${HANDDETECT_CVAT_EMAIL}"
+    command:
+      - bash
+      - -lc
+      - |
+        for attempt in $$(seq 1 120); do
+          if python3 ~/manage.py shell -c 'exec("from django.contrib.auth import get_user_model\nfrom os import environ\nUser = get_user_model()\nusername = environ[\"HANDDETECT_CVAT_USERNAME\"]\nemail = environ[\"HANDDETECT_CVAT_EMAIL\"]\npassword = environ[\"HANDDETECT_CVAT_PASSWORD\"]\nuser, _ = User.objects.get_or_create(username=username, defaults={\"email\": email})\nuser.email = email\nuser.is_staff = True\nuser.is_superuser = True\nuser.set_password(password)\nuser.save()\nprint(f\"cvat local superuser ready: {username}\")")'; then
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "failed to bootstrap CVAT local superuser" >&2
+        exit 1
+    volumes:
+      - /tmp/handdetect-services/cvat/data:/home/django/data
+      - /tmp/handdetect-services/cvat/keys:/home/django/keys
+      - /tmp/handdetect-services/cvat/logs:/home/django/logs

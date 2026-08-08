@@ -3,10 +3,16 @@
   "$id": "handdetect-run-event.schema.json",
   "title": "HandDetect Run Event",
   "type": "object",
+  "x-berg10": {
+    "kind": "raw_source_payload"
+  },
+  "x-berg10.kind": "raw_source_schema",
   "additionalProperties": false,
   "required": [
     "event_id",
     "event_type",
+    "family",
+    "idempotency_key",
     "run_suite_id",
     "run_id",
     "source_kind",
@@ -21,6 +27,14 @@
     "event_type": {
       "type": "string",
       "enum": ["run_started", "clip_processed", "artifact_ready", "run_completed", "run_failed"]
+    },
+    "family": {
+      "type": "string",
+      "enum": ["b_runtime_status", "b_artifact"]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
     },
     "run_suite_id": {
       "type": "string",

@@ -8,5 +8,6 @@
 /.handdetect
 /.pytest_cache
 /.superpowers
+/.tmp
 
 __pycache__

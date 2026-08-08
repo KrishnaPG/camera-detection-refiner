@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://handdetect.local/schemas/handdetect-story-row.schema.json",
+  "title": "HandDetect Story C-view Row",
+  "type": "object",
+  "x-berg10": {
+    "kind": "c_view_row"
+  },
+  "additionalProperties": true,
+  "required": ["row_id", "run_id"],
+  "properties": {
+    "row_id": { "type": "string", "minLength": 1 },
+    "run_suite_id": { "type": ["string", "null"] },
+    "run_id": { "type": "string", "minLength": 1 },
+    "clip_id": { "type": ["string", "null"] },
+    "event_type": { "type": ["string", "null"] },
+    "status": { "type": ["string", "null"] },
+    "label": { "type": ["string", "null"] },
+    "artifact_path": { "type": ["string", "null"] },
+    "confidence": { "type": ["number", "null"] },
+    "created_at": { "type": ["string", "null"] },
+    "decision": { "type": ["string", "null"] },
+    "frame": { "type": ["integer", "null"] },
+    "sort_key": { "type": ["string", "null"] },
+    "package_id": { "type": ["string", "null"] },
+    "payload_json": { "type": ["string", "object", "null"] },
+    "reason": { "type": ["string", "null"] },
+    "stage": { "type": ["string", "null"] },
+    "track_id": { "type": ["integer", "null"] },
+    "url": { "type": ["string", "null"] }
+  }
+}

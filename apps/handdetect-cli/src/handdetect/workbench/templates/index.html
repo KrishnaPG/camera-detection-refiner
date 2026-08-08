@@ -6,21 +6,27 @@
   </head>
   <body>
     <h1>HandDetect Workbench</h1>
-    <p>Workbench: <a href="{{ service_links.workbench }}">{{ service_links.workbench }}</a></p>
+    <p>Workbench: <a href="{{ service_links.workbench }}" target="_blank" rel="noopener noreferrer">{{ service_links.workbench }}</a></p>
+    {% if service_links.biodock %}
+    <p>BioDock Berg10: <a href="{{ service_links.biodock }}" target="_blank" rel="noopener noreferrer">{{ service_links.biodock }}</a></p>
+    {% endif %}
     {% if service_links.mlflow %}
-    <p>MLflow: <a href="{{ service_links.mlflow }}">{{ service_links.mlflow }}</a></p>
+    <p>MLflow: <a href="{{ service_links.mlflow }}" target="_blank" rel="noopener noreferrer">{{ service_links.mlflow }}</a></p>
     {% endif %}
     {% if service_links.evidently %}
-    <p>Evidently: <a href="{{ service_links.evidently }}">{{ service_links.evidently }}</a></p>
+    <p>Evidently: <a href="{{ service_links.evidently }}" target="_blank" rel="noopener noreferrer">{{ service_links.evidently }}</a></p>
     {% endif %}
     {% if service_links.fiftyone %}
-    <p>FiftyOne: <a href="{{ service_links.fiftyone }}">{{ service_links.fiftyone }}</a></p>
+    <p>FiftyOne: <a href="{{ service_links.fiftyone }}" target="_blank" rel="noopener noreferrer">{{ service_links.fiftyone }}</a></p>
     {% endif %}
     {% if service_links.label_studio %}
-    <p>Label Studio: <a href="{{ service_links.label_studio }}">{{ service_links.label_studio }}</a></p>
+    <p>Label Studio: <a href="{{ service_links.label_studio }}" target="_blank" rel="noopener noreferrer">{{ service_links.label_studio }}</a></p>
     {% endif %}
     {% if service_links.cvat %}
-    <p>CVAT: <a href="{{ service_links.cvat }}">{{ service_links.cvat }}</a></p>
+    <p>CVAT: <a href="{{ service_links.cvat }}" target="_blank" rel="noopener noreferrer">{{ service_links.cvat }}</a></p>
+    {% endif %}
+    {% if service_links.rerun %}
+    <p>Rerun: <a href="{{ service_links.rerun }}" target="_blank" rel="noopener noreferrer">{{ service_links.rerun }}</a></p>
     {% endif %}
     <form method="post" action="/run-smoke">
       <button type="submit">Run Smoke Experiment</button>

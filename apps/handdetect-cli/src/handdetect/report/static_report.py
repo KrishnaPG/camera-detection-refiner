@@ -119,11 +119,15 @@ class StaticReportBuilder:
         rows = [
             self._platform_row(platforms, key, label)
             for key, label in [
+                ("biodock", "BioDock Berg10"),
                 ("mlflow", "MLflow"),
                 ("dvc", "DVC"),
                 ("evidently", "Evidently"),
                 ("fiftyone", "FiftyOne"),
                 ("label_studio", "Label Studio"),
+                ("cvat", "CVAT"),
+                ("datumaro", "Datumaro"),
+                ("rerun", "Rerun"),
             ]
         ]
         visible_rows = [row for row in rows if row]
@@ -139,7 +143,10 @@ class StaticReportBuilder:
         url = raw_status.get("url")
         path = raw_status.get("path")
         if isinstance(url, str) and url:
-            target = f'<a href="{escape(url)}">{escape(url)}</a>'
+            target = (
+                f'<a href="{escape(url)}" target="_blank" '
+                f'rel="noopener noreferrer">{escape(url)}</a>'
+            )
         elif isinstance(path, str) and path:
             target = f"<code>{escape(path)}</code>"
         else:

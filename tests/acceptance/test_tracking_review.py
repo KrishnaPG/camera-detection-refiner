@@ -13,6 +13,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from dq_contracts.ids import RunId, RunSuiteId
+from handdetect.review.cvat_export import CvatCorrectionImporter, CvatPublisherConfig
 from handdetect.review.fiftyone_dataset import _SESSIONS, FiftyOneDatasetPublisher
 from handdetect.review.labelstudio_client import (
     LABEL_STUDIO_PROJECT_TITLE_MAX_LENGTH,
@@ -499,6 +500,87 @@ def test_label_studio_project_title_fits_service_limit(tmp_path) -> None:
     assert title.endswith("smoke-339952987db72eb3")
 
 
+def test_cvat_correction_import_freezes_run_scoped_label_version(monkeypatch, tmp_path) -> None:
+    run_root = _write_minimal_cvat_run(tmp_path)
+    fake_cvat = types.ModuleType("cvat_sdk")
+
+    class FakeLabel:
+        id = 42
+        name = "adapter_approved"
+        color = "#30d158"
+
+    class FakeShape:
+        def __init__(self) -> None:
+            self.id = 9001
+            self.frame = 0
+            self.label_id = 42
+            self.type = "rectangle"
+            self.points = [1.0, 2.0, 7.0, 8.0]
+            self.occluded = False
+            self.outside = False
+            self.source = "manual"
+            self.z_order = 0
+            self.attributes = []
+
+    class FakeAnnotations:
+        def __init__(self) -> None:
+            self.shapes = [FakeShape()]
+
+    class FakeTask:
+        def get_labels(self):
+            return [FakeLabel()]
+
+        def get_annotations(self):
+            return FakeAnnotations()
+
+    class FakeTasks:
+        def retrieve(self, task_id):
+            assert task_id == 77
+            return FakeTask()
+
+    class FakeClient:
+        tasks = FakeTasks()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def check_server_version(self, fail_if_unsupported: bool):
+            return None
+
+    def fake_make_client(url, credentials):
+        assert url == "http://cvat-server:8080"
+        assert credentials == ("handdetect", "handdetect-local")
+        return FakeClient()
+
+    fake_cvat.make_client = fake_make_client
+    monkeypatch.setitem(sys.modules, "cvat_sdk", fake_cvat)
+
+    result = CvatCorrectionImporter().import_corrections(
+        run_root,
+        CvatPublisherConfig(
+            internal_url="http://cvat-server:8080",
+            public_url="http://10.7.0.4:60903",
+            username="handdetect",
+            password="handdetect-local",
+        ),
+    )
+
+    assert result.status == "ready"
+    assert result.label_set_id
+    assert result.shape_count == 1
+    assert result.frozen_manifest_path is not None
+    assert result.frozen_manifest_path.is_relative_to(run_root / "labels" / "versions")
+    corrections = json.loads((run_root / "review" / "cvat-corrections.json").read_text())
+    assert corrections["annotation_sha256"] == result.annotation_sha256
+    assert corrections["frames"][0]["shapes"][0]["source"] == "manual"
+    freeze = json.loads((run_root / "review" / "cvat-label-freeze.json").read_text())
+    assert freeze["label_set_id"] == result.label_set_id
+    assert not (ROOT / "labels" / "versions" / result.label_set_id).exists()
+
+
 def _fake_fiftyone_module() -> types.ModuleType:
     fake = types.ModuleType("fiftyone")
     fake._datasets = {}
@@ -595,6 +677,49 @@ def _write_minimal_fiftyone_run(tmp_path: Path) -> Path:
             }
         ),
         run_root / "tables" / "decisions_clip-1.parquet",
+    )
+    return run_root
+
+
+def _write_minimal_cvat_run(tmp_path: Path) -> Path:
+    run_root = tmp_path / "runs" / "suite-a" / "run-a"
+    (run_root / "review" / "clips" / "clip-1").mkdir(parents=True)
+    (run_root / "report" / "samples").mkdir(parents=True)
+    (run_root / "report" / "samples" / "sample-000.jpg").write_bytes(b"sample")
+    (run_root / "review" / "labelstudio-tasks.json").write_text(
+        json.dumps(
+            [
+                {
+                    "data": {
+                        "clip_id": "clip-1",
+                        "frame": 0,
+                        "image": (
+                            "http://10.7.0.4:60050/artifacts/suite-a/run-a/"
+                            "report/samples/sample-000.jpg"
+                        ),
+                    }
+                }
+            ],
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (run_root / "review" / "clips" / "clip-1" / "boxes.json").write_text(
+        json.dumps({"frames": [{"frame": 0, "boxes": []}]}, indent=2),
+        encoding="utf-8",
+    )
+    (run_root / "review" / "cvat-import.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "task_id": 77,
+                "task_url": "http://10.7.0.4:60903/tasks/77",
+                "job_ids": [78],
+                "job_urls": ["http://10.7.0.4:60903/tasks/77/jobs/78"],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
     )
     return run_root
 

@@ -5,7 +5,7 @@
   "metadata": {
     "package_id": "handdetect_quality_adapter",
     "alias": "handdetect",
-    "version": "2026.08.07",
+    "version": "2026.08.08",
     "display_name": "HandDetect Quality Adapter",
     "generator_id": "handdetect-quality-adapter"
   },
@@ -14,7 +14,7 @@
       "source_kind": "handdetect_quality_run",
       "producer_id": "handdetect-quality-adapter",
       "producer_versions": [
-        ">=2026.08.07 <2027.0.0"
+        ">=2026.08.08 <2027.0.0"
       ]
     },
     "conflict_policy": "reject_ambiguous_active_match"
@@ -30,11 +30,6 @@
       "title": "Run smoke experiment",
       "description": "Run the HandDetect smoke experiment and publish run-scoped visual review artifacts.",
       "outputs": [
-        {
-          "role": "handdetect_run_events",
-          "kind": "raw_source",
-          "view_id": null
-        },
         {
           "role": "handdetect_story_projection",
           "kind": "c_view",
@@ -59,9 +54,8 @@
     {
       "schema": "schemas/handdetect-run-event.schema.json",
       "families": [
-        "b_run",
-        "b_artifact",
-        "b_decision"
+        "b_runtime_status",
+        "b_artifact"
       ],
       "validation": "required_on_accept"
     }

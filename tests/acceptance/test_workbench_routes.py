@@ -20,20 +20,25 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_workbench_index_renders_operator_entrypoints(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HANDDETECT_WORKBENCH_PUBLIC_URL", "http://10.7.0.4:60050")
+    monkeypatch.setenv("HANDDETECT_BIODOCK_PUBLIC_URL", "http://10.7.0.4:10050")
     monkeypatch.setenv("HANDDETECT_MLFLOW_PUBLIC_URL", "http://10.7.0.4:60900")
     monkeypatch.setenv("HANDDETECT_EVIDENTLY_PUBLIC_URL", "http://10.7.0.4:60904")
     monkeypatch.setenv("HANDDETECT_FIFTYONE_PUBLIC_URL", "http://10.7.0.4:60901")
     monkeypatch.setenv("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "http://10.7.0.4:60902")
     monkeypatch.setenv("HANDDETECT_CVAT_PUBLIC_URL", "http://10.7.0.4:60903")
+    monkeypatch.setenv("HANDDETECT_RERUN_PUBLIC_URL", "http://10.7.0.4:60905")
     response = TestClient(create_app()).get("/")
     assert response.status_code == 200
     assert "HandDetect Workbench" in response.text
     assert "http://10.7.0.4:60050" in response.text
+    assert "http://10.7.0.4:10050" in response.text
     assert "http://10.7.0.4:60900" in response.text
     assert "http://10.7.0.4:60904" in response.text
     assert "http://10.7.0.4:60901" in response.text
     assert "http://10.7.0.4:60902" in response.text
     assert "http://10.7.0.4:60903" in response.text
+    assert "http://10.7.0.4:60905" in response.text
+    assert 'target="_blank" rel="noopener noreferrer"' in response.text
     assert "Run Smoke Experiment" in response.text
 
 
@@ -66,6 +71,16 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
         json.dumps(
             {
                 "report": {"url": "/artifacts/report/index.html"},
+                "biodock": {
+                    "status": "ready",
+                    "url": (
+                        "http://10.7.0.4:10050?"
+                        "generator_package_bundle_url=http%3A%2F%2F10.7.0.4%3A60050%2Fgenerator-package%2Fbundle.json"
+                        "&generator_workspace_layout_id=handdetect_customer_demo_console"
+                        "&generator_review_url=http%3A%2F%2F10.7.0.4%3A60050%2Fruns%2F"
+                        f"{suite_id}%2F{run_id}%2Fstory"
+                    ),
+                },
                 "mlflow": {"status": "ready", "url": "http://10.7.0.4:60900"},
                 "dvc": {"status": "exported", "path": "dvclive/run"},
                 "evidently": {"status": "ready", "url": "/artifacts/report/evidently.html"},
@@ -83,8 +98,8 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
                     "url": "/artifacts/review/datumaro-handoff.json",
                 },
                 "rerun": {
-                    "status": "handoff_file",
-                    "url": "/artifacts/review/rerun-handoff.json",
+                    "status": "ready",
+                    "url": "http://10.7.0.4:60905/?url=http%3A%2F%2F10.7.0.4%3A60050%2Fartifacts%2Fsuite%2Frun%2Freview%2Frerun%2Fhanddetect-review.rrd",
                 },
             },
             indent=2,
@@ -99,13 +114,37 @@ def test_workbench_run_detail_renders_platform_links(monkeypatch, tmp_path) -> N
     assert "Visual review" in response.text
     assert "Local Story Review" in response.text
     assert f"/artifacts/{suite_id}/{run_id}/report/visual-review.html" in response.text
+    assert "BioDock Berg10" in response.text
+    assert "generator_package_bundle_url" in response.text
+    assert "generator_workspace_layout_id=handdetect_customer_demo_console" in response.text
+    assert "generator_review_url" in response.text
     assert "http://10.7.0.4:60900" in response.text
     assert "http://10.7.0.4:60901" in response.text
     assert "http://10.7.0.4:60903" in response.text
     assert "Datumaro" in response.text
     assert "Rerun" in response.text
+    assert "http://10.7.0.4:60905/?url=" in response.text
+    assert 'target="_blank" rel="noopener noreferrer"' in response.text
     assert "Open Review Platforms" in response.text
     assert "Replay With Override" in response.text
+
+
+def test_workbench_serves_generator_package_bundle(monkeypatch) -> None:
+    monkeypatch.chdir(ROOT)
+    response = TestClient(create_app()).get("/generator-package/bundle.json")
+
+    assert response.status_code == 200
+    bundle = response.json()
+    assert bundle["manifest"]["metadata"]["package_id"] == "handdetect_quality_adapter"
+    assert bundle["workspace"]["workspaceId"] == "handdetect_quality_story"
+    artifact_paths = {artifact["path"] for artifact in bundle["artifacts"]}
+    assert artifact_paths == {
+        "schemas/handdetect-run-event.schema.json",
+        "schemas/handdetect-story-row.schema.json",
+        "ui/workspace.json",
+        "ui/themes/handdetect-story.overrides.css",
+        "views/handdetect_story_views.sql",
+    }
 
 
 def test_workbench_story_page_renders_video_review_layout(monkeypatch, tmp_path) -> None:
@@ -170,11 +209,51 @@ def test_workbench_story_page_renders_video_review_layout(monkeypatch, tmp_path)
     assert "adapterOverlaySvg" in response.text
     assert "zoomSlider" in response.text
     assert "timeContent" in response.text
-    assert "clip.raw_overlay_url" in response.text
-    assert "clip.adapter_overlay_url" in response.text
-    assert "clip.boxes_path" in response.text
-    assert "pointerdown" in response.text
-    assert "wheel" in response.text
+    assert "markerCanvas" in response.text
+    assert "/assets/story-review.js" in response.text
+
+
+def test_workbench_story_page_opens_platform_links_in_new_tabs(monkeypatch, tmp_path) -> None:
+    suite_id = "suite-20260807-story-platforms"
+    run_id = "run-20260807-story-platforms"
+    run_root = tmp_path / "runs" / suite_id / run_id
+    review_root = run_root / "review"
+    review_root.mkdir(parents=True)
+    monkeypatch.setenv("HANDDETECT_RUNS_ROOT", str(tmp_path / "runs"))
+    monkeypatch.chdir(tmp_path)
+
+    (review_root / "story.json").write_text(
+        json.dumps(
+            {
+                "run_suite_id": suite_id,
+                "run_id": run_id,
+                "status": "complete",
+                "default_layout_id": "handdetect_customer_demo_console",
+                "raw_detection_count": 0,
+                "kept_detection_count": 0,
+                "rejected_detection_count": 0,
+                "interpolated_detection_count": 0,
+                "clips": [],
+                "support_states": [],
+                "platforms": [
+                    {
+                        "platform": "rerun",
+                        "label": "Rerun",
+                        "status": "ready",
+                        "url": "http://10.7.0.4:60905/?url=recording",
+                    }
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    response = TestClient(create_app()).get(f"/runs/{suite_id}/{run_id}/story")
+
+    assert response.status_code == 200
+    assert "http://10.7.0.4:60905/?url=recording" in response.text
+    assert 'target="_blank" rel="noopener noreferrer"' in response.text
 
 
 def test_source_video_path_blocks_escape_and_unknown_eye(tmp_path: Path) -> None:

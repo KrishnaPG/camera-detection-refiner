@@ -40,6 +40,13 @@ class RuntimeConfig(BaseModel):
     workbench_host: str = "127.0.0.1"
     workbench_port: int = Field(default=8000, ge=1, le=65535)
     workbench_public_url: str = ""
+    biodock_public_url: str = ""
+    biodock_rpc_url: str = ""
+    biodock_access_token: str = ""
+    biodock_token_url: str = ""
+    biodock_client_id: str = ""
+    biodock_client_secret: str = ""
+    biodock_external_table_root: Path | None = None
     mlflow_public_url: str = ""
     fiftyone_public_url: str = ""
     label_studio_url: str = ""
@@ -49,6 +56,8 @@ class RuntimeConfig(BaseModel):
     cvat_public_url: str = ""
     cvat_username: str = ""
     cvat_password: str = ""
+    datumaro_url: str = ""
+    rerun_public_url: str = ""
     evidently_public_url: str = ""
 
 

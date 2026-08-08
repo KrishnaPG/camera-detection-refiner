@@ -24,7 +24,7 @@
     {
       "panelId": "handdetect_synchronized_viewer",
       "viewId": "handdetect_story_viewer_v1",
-      "appPanel": "biodock.cViewPanel",
+      "appPanel": "biodock.externalReviewFrame",
       "title": "Synchronized Viewer"
     },
     {
@@ -144,6 +144,7 @@
     }
   ],
   "theme": {
+    "skinPackId": "handdetect-forensic-workbench",
     "overrideCssPath": "ui/themes/handdetect-story.overrides.css",
     "extends": "base"
   }

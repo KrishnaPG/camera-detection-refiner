@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,7 +12,8 @@ import uvicorn
 from dq_contracts.ids import RunId, RunSuiteId
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from handdetect.lineage.replay import LineageReplayService
 from handdetect.review_journey.launcher import ReviewJourneyLauncher
@@ -29,6 +31,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+    static_dir = Path(__file__).resolve().parent / "static"
+    app.mount("/assets", StaticFiles(directory=str(static_dir)), name="assets")
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> HTMLResponse:
@@ -123,6 +127,10 @@ def create_app() -> FastAPI:
                 "story": story_summary(run_root),
             },
         )
+
+    @app.get("/generator-package/bundle.json")
+    def generator_package_bundle() -> JSONResponse:
+        return JSONResponse(generator_package_bundle_payload())
 
     @app.get("/runs/{suite_id}/{run_id}/story", response_class=HTMLResponse)
     def story_review(request: Request, suite_id: str, run_id: str) -> HTMLResponse:
@@ -237,24 +245,74 @@ def story_summary(run_root: Path) -> dict[str, object]:
     }
 
 
+def generator_package_bundle_payload() -> dict[str, object]:
+    package_root = Path.cwd() / "generator-package"
+    manifest = json.loads(
+        (package_root / "generator-package-manifest.json").read_text(encoding="utf-8")
+    )
+    workspace = json.loads((package_root / "ui" / "workspace.json").read_text(encoding="utf-8"))
+    artifacts = [
+        generator_package_artifact(
+            package_root,
+            "schemas/handdetect-run-event.schema.json",
+            "application/schema+json",
+        ),
+        generator_package_artifact(
+            package_root,
+            "schemas/handdetect-story-row.schema.json",
+            "application/schema+json",
+        ),
+        generator_package_artifact(package_root, "ui/workspace.json", "application/json"),
+        generator_package_artifact(
+            package_root,
+            "ui/themes/handdetect-story.overrides.css",
+            "text/css",
+        ),
+        generator_package_artifact(
+            package_root,
+            "views/handdetect_story_views.sql",
+            "text/sql",
+        ),
+    ]
+    return {
+        "artifacts": artifacts,
+        "manifest": manifest,
+        "workspace": workspace,
+    }
+
+
+def generator_package_artifact(
+    package_root: Path, relative_path: str, media_type: str
+) -> dict[str, str]:
+    return {
+        "content": (package_root / relative_path).read_text(encoding="utf-8"),
+        "media_type": media_type,
+        "path": relative_path,
+    }
+
+
 def serve(host: str, port: int) -> None:
     uvicorn.run(create_app(), host=host, port=port)
 
 
 def service_links() -> dict[str, str]:
     workbench_url = os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", "").strip()
+    biodock_url = os.environ.get("HANDDETECT_BIODOCK_PUBLIC_URL", "").strip()
     mlflow_url = os.environ.get("HANDDETECT_MLFLOW_PUBLIC_URL", "").strip()
     evidently_url = os.environ.get("HANDDETECT_EVIDENTLY_PUBLIC_URL", "").strip()
     fiftyone_url = os.environ.get("HANDDETECT_FIFTYONE_PUBLIC_URL", "").strip()
     label_studio_url = os.environ.get("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", "").strip()
     cvat_url = os.environ.get("HANDDETECT_CVAT_PUBLIC_URL", "").strip()
+    rerun_url = os.environ.get("HANDDETECT_RERUN_PUBLIC_URL", "").strip()
     return {
         "workbench": workbench_url or "http://127.0.0.1:8000",
+        "biodock": biodock_url or "",
         "mlflow": mlflow_url or "",
         "evidently": evidently_url or "",
         "fiftyone": fiftyone_url or "",
         "label_studio": label_studio_url or "",
         "cvat": cvat_url or "",
+        "rerun": rerun_url or "",
     }
 
 
@@ -263,10 +321,12 @@ def allowed_cors_origins() -> list[str]:
         url.rstrip("/")
         for url in [
             os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", ""),
+            os.environ.get("HANDDETECT_BIODOCK_PUBLIC_URL", ""),
             os.environ.get("HANDDETECT_FIFTYONE_PUBLIC_URL", ""),
             os.environ.get("HANDDETECT_LABEL_STUDIO_PUBLIC_URL", ""),
             os.environ.get("HANDDETECT_EVIDENTLY_PUBLIC_URL", ""),
             os.environ.get("HANDDETECT_CVAT_PUBLIC_URL", ""),
+            os.environ.get("HANDDETECT_RERUN_PUBLIC_URL", ""),
         ]
         if url.strip()
     }
@@ -283,11 +343,12 @@ def parse_run_ids(log_text: str) -> tuple[str | None, str | None]:
 
 def self_contained_job_script(log_path: Path, exit_path: Path) -> str:
     job_root = workbench_job_root()
+    python_executable = sys.executable
     return f"""
 set -uo pipefail
 mkdir -p {job_root}
 status=0
-python -m handdetect.cli.main run \\
+{python_executable} -m handdetect.cli.main run \\
   --config configs/smoke-experiment.toml 2>&1 | tee {log_path} || status=$?
 if [ "$status" -eq 0 ]; then
   suite_id=$(sed -n 's/.*suite_id=\\([^ ]*\\).*/\\1/p' {log_path} | tail -1)
@@ -295,7 +356,7 @@ if [ "$status" -eq 0 ]; then
   if [ -n "$suite_id" ] && [ -n "$run_id" ]; then
     HANDDETECT_JOB_SUITE_ID="$suite_id" \\
     HANDDETECT_JOB_RUN_ID="$run_id" \\
-    python - <<'PY' >> {log_path} 2>&1 || status=$?
+    {python_executable} - <<'PY' >> {log_path} 2>&1 || status=$?
 import os
 from urllib.parse import quote
 from urllib.request import Request, urlopen

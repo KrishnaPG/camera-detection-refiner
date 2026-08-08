@@ -33,14 +33,14 @@ def handdetect_generator_package_bundle() -> GeneratorPackageBundleSpec:
         metadata=PackageMetadataSpec(
             package_id="handdetect_quality_adapter",
             alias="handdetect",
-            version="2026.08.07",
+            version="2026.08.08",
             display_name="HandDetect Quality Adapter",
             generator_id="handdetect-quality-adapter",
         ),
         activation=PackageActivationSpec(
             source_kind="handdetect_quality_run",
             producer_id="handdetect-quality-adapter",
-            producer_versions=(">=2026.08.07 <2027.0.0",),
+            producer_versions=(">=2026.08.08 <2027.0.0",),
         ),
         implementation=PackageImplementationSpec(
             language="python",
@@ -56,7 +56,6 @@ def handdetect_generator_package_bundle() -> GeneratorPackageBundleSpec:
                     "review artifacts."
                 ),
                 outputs=(
-                    PackageActionOutputSpec(role="handdetect_run_events", kind="raw_source"),
                     PackageActionOutputSpec(
                         role="handdetect_story_projection",
                         kind="c_view",
@@ -72,7 +71,7 @@ def handdetect_generator_package_bundle() -> GeneratorPackageBundleSpec:
         raw_admissions=(
             RawAdmissionSpec(
                 schema="schemas/handdetect-run-event.schema.json",
-                families=("b_run", "b_artifact", "b_decision"),
+                families=("b_runtime_status", "b_artifact"),
             ),
         ),
         views=(ViewSpec(sql="views/handdetect_story_views.sql"),),
@@ -85,7 +84,10 @@ def _workspace_spec() -> PackageWorkspaceSpec:
         workspaceId="handdetect_quality_story",
         defaultLayoutId="handdetect_customer_demo_console",
         selectorGroupLabel="HandDetect",
-        theme=WorkspaceThemeSpec(overrideCssPath="ui/themes/handdetect-story.overrides.css"),
+        theme=WorkspaceThemeSpec(
+            skinPackId="handdetect-forensic-workbench",
+            overrideCssPath="ui/themes/handdetect-story.overrides.css",
+        ),
         panels=_panels(),
         layouts=_layouts(),
     )
@@ -104,6 +106,7 @@ def _panels() -> tuple[WorkspacePanelSpec, ...]:
             "handdetect_synchronized_viewer",
             "Synchronized Viewer",
             "handdetect_story_viewer_v1",
+            app_panel="biodock.externalReviewFrame",
         ),
         _panel("handdetect_decision_inspector", "Decision Inspector", "handdetect_story_events_v1"),
         _panel("handdetect_track_explorer", "Track Explorer", "handdetect_story_tracks_v1"),
@@ -118,12 +121,18 @@ def _panels() -> tuple[WorkspacePanelSpec, ...]:
     )
 
 
-def _panel(panel_id: str, title: str, view_id: str) -> WorkspacePanelSpec:
+def _panel(
+    panel_id: str,
+    title: str,
+    view_id: str,
+    *,
+    app_panel: str = "biodock.cViewPanel",
+) -> WorkspacePanelSpec:
     return WorkspacePanelSpec(
         panelId=panel_id,
         title=title,
         viewId=view_id,
-        appPanel="biodock.cViewPanel",
+        appPanel=app_panel,
     )
 
 

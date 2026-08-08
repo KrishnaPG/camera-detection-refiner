@@ -15,6 +15,14 @@ class ReviewPlatformStatus(BaseModel):
     message: str
     project_id: int | None = None
     imported_task_count: int | None = None
+    task_id: int | None = None
+    job_ids: tuple[int, ...] = ()
+    job_urls: tuple[str, ...] = ()
+    recording_url: str | None = None
+    correction_path: Path | None = None
+    label_set_id: str | None = None
+    annotation_sha256: str | None = None
+    shape_count: int | None = None
 
 
 class ReviewPlatformManifest(BaseModel):
@@ -23,6 +31,7 @@ class ReviewPlatformManifest(BaseModel):
     run_suite_id: RunSuiteId
     run_id: RunId
     report: ReviewPlatformStatus
+    biodock: ReviewPlatformStatus
     mlflow: ReviewPlatformStatus
     dvc: ReviewPlatformStatus
     evidently: ReviewPlatformStatus

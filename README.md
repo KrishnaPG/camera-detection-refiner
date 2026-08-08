@@ -7,6 +7,8 @@
 - Evidently: `http://10.7.0.4:60904`
 - FiftyOne: `http://10.7.0.4:60901`
 - Label Studio: `http://10.7.0.4:60902`
+- CVAT: `http://10.7.0.4:60903`
+- Rerun: `http://10.7.0.4:60905`
 
 Use the Workbench UI to trigger a smoke run, inspect artifacts, and replay prior runs.
 
@@ -15,6 +17,19 @@ Local Label Studio credentials:
 - Email: `handdetect@example.local`
 - Password: `handdetect-local`
 - API token: `handdetect-local-token`
+
+Local CVAT credentials:
+
+- Username: `handdetect`
+- Password: `handdetect-local`
+- Email: `handdetect@example.local`
+
+Local BioDock credentials:
+
+- Username: `biodock-admin`
+- Password: `biodock-local-admin-password`
+- Service client: `biodock-controller`
+- Service secret: `biodock-local-controller-secret`
 
 Developer-only host commands are available after `make bootstrap`:
 
@@ -29,4 +44,4 @@ Docker service backing stores are under `/tmp/handdetect-services`.
 Generated state is pruned automatically; defaults keep 5 suites, cap runtime state at 20 GiB, and preserve 5 GiB free disk.
 Runtime retention runs automatically with `HANDDETECT_KEEP_SUITES`, `HANDDETECT_MAX_RUNTIME_BYTES`, and `HANDDETECT_MIN_FREE_BYTES`.
 The `dvc` status surfaced in run artifacts is DVCLive metrics output only; replay restore authority in this assignment remains content-hash snapshot lineage, even when a replay worktree can execute `dvc pull`/`checkout`.
-CVAT and Datumaro are surfaced as run-scoped handoff manifests; set `HANDDETECT_CVAT_PUBLIC_URL` when a CVAT service is available.
+CVAT, Rerun, and Datumaro are Docker-managed by default. Run reports link directly to the run-scoped CVAT task/job, Rerun recording, and Datumaro diff manifest when those services are ready. No repo-local or host Python virtualenv is required for normal use; Python dependencies are isolated inside Docker images, with the workbench and Datumaro each using their own container-internal virtualenv.
