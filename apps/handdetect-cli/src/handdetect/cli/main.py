@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -35,6 +38,7 @@ app.add_typer(lineage_app, name="lineage")
 app.add_typer(workbench_app, name="workbench")
 
 RunConfigOption = Annotated[Path, typer.Option(exists=True, readable=True)]
+SmokeConfigOption = Annotated[Path, typer.Option("--config", exists=True, readable=True)]
 FromRunOption = Annotated[str, typer.Option("--from-run")]
 ReplayOverrideOption = Annotated[list[str] | None, typer.Option("--set")]
 
@@ -65,20 +69,70 @@ def seed(data_root: Path = Path("data"), out: Path | None = None) -> None:
 
 @app.command()
 def run(config: RunConfigOption) -> None:
+    run_experiment_suite(config, open_review=False)
+
+
+@app.command("run-smoke-experiment")
+def run_smoke_experiment(
+    config: SmokeConfigOption = Path("configs/smoke-experiment.toml"),
+) -> None:
+    run_experiment_suite(config, open_review=True)
+
+
+def run_experiment_suite(config: Path, open_review: bool) -> list[tuple[RunSuiteId, RunId]]:
     parsed = parse_config_with_runtime_env(config)
     suite_id = RunSuiteIdProvider().create()
-    run_ids = ExperimentRunner().run(parsed, suite_id, config)
+    with progress_phase("pipeline", "adapter_experiment"):
+        run_ids = ExperimentRunner().run(parsed, suite_id, config)
+    created_runs: list[tuple[RunSuiteId, RunId]] = []
     for run_id in run_ids:
         run_root = parsed.runtime.runs_root / str(suite_id) / str(run_id)
-        SampleManifestBuilder().build(run_root)
-        OverlaySampler().write_contact_sheet(run_root)
-        FiftyOneExporter().export(run_root)
-        LabelStudioExporter().export_tasks(run_root)
-        StoryArtifactBuilder().build(run_root, parsed.runtime.workbench_public_url or "")
-        StaticLineage().capture(parsed.runtime, run_root, suite_id, run_id, config)
+        with progress_phase("samples", f"sample_manifest run_id={run_id}"):
+            SampleManifestBuilder().build(run_root)
+            OverlaySampler().write_contact_sheet(run_root)
+        with progress_phase("fiftyone_manifest", f"fiftyone_manifest run_id={run_id}"):
+            FiftyOneExporter().export(run_root)
+        with progress_phase("label_studio_export", f"label_studio_export run_id={run_id}"):
+            LabelStudioExporter().export_tasks(run_root)
+        with progress_phase("story_media", f"story_review_media run_id={run_id}"):
+            StoryArtifactBuilder().build(run_root, parsed.runtime.workbench_public_url or "")
+        with progress_phase("lineage", f"lineage_snapshot run_id={run_id}"):
+            StaticLineage().capture(parsed.runtime, run_root, suite_id, run_id, config)
+        if open_review:
+            with progress_phase("review_platforms", f"review_platforms run_id={run_id}"):
+                ReviewJourneyLauncher().open(
+                    suite_id,
+                    run_id,
+                    parsed.runtime,
+                    run_root,
+                )
+        created_runs.append((suite_id, run_id))
         typer.echo(
             f"suite_id={suite_id} run_id={run_id} report={run_root / 'report' / 'index.html'}"
         )
+    return created_runs
+
+
+@contextmanager
+def progress_phase(phase: str, message: str) -> Iterator[None]:
+    start = time.perf_counter()
+    emit_progress(phase, "running", message)
+    try:
+        yield
+    except Exception as exc:
+        elapsed_seconds = time.perf_counter() - start
+        emit_progress(
+            phase,
+            "failed",
+            f"{message} error={type(exc).__name__} elapsed_seconds={elapsed_seconds:.3f}",
+        )
+        raise
+    elapsed_seconds = time.perf_counter() - start
+    emit_progress(phase, "complete", f"{message} elapsed_seconds={elapsed_seconds:.3f}")
+
+
+def emit_progress(phase: str, status: str, message: str) -> None:
+    typer.echo(f"progress phase={phase} status={status} message={message}")
 
 
 class StaticLineage:

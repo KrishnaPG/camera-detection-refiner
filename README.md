@@ -11,6 +11,13 @@
 - Rerun: `http://10.7.0.4:60905`
 
 Use the Workbench UI to trigger a smoke run, inspect artifacts, and replay prior runs.
+The same smoke flow can be triggered from the repo root with one command:
+
+```bash
+docker compose exec workbench handdetect run-smoke-experiment --config configs/smoke-experiment.toml
+```
+
+That command runs the adapter pipeline, publishes the review platform artifacts, and prints the `suite_id` and `run_id` used by the Workbench run report.
 
 Local Label Studio credentials:
 

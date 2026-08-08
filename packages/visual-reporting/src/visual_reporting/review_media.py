@@ -63,6 +63,8 @@ class ReviewMediaArtifactBuilder:
     def build_clip(self, media: ClipMediaInput) -> None:
         clip_root = media.run_root / "review" / "clips" / media.clip_id
         clip_root.mkdir(parents=True, exist_ok=True)
+        if _clip_media_complete(clip_root):
+            return
         detections = _read_rows(media.run_root / "tables" / f"detections_{media.clip_id}.parquet")
         decisions = _read_rows(media.run_root / "tables" / f"decisions_{media.clip_id}.parquet")
         tracks = _read_rows(media.run_root / "tables" / f"tracks_{media.clip_id}.parquet")
@@ -269,6 +271,21 @@ def _ffmpeg_command(output_path: Path, width: int, height: int, fps: float) -> l
         "+faststart",
         str(output_path),
     ]
+
+
+def _clip_media_complete(clip_root: Path) -> bool:
+    required = (
+        RAW_OVERLAY_FILE,
+        ADAPTER_OVERLAY_FILE,
+        REJECTED_OVERLAY_FILE,
+        COMPARE_OVERLAY_FILE,
+        THUMBNAIL_STRIP_FILE,
+        BOX_INDEX_FILE,
+    )
+    return all(
+        (clip_root / file_name).is_file() and (clip_root / file_name).stat().st_size > 0
+        for file_name in required
+    )
 
 
 def _box_row(source_index: int, detection: JsonMap, decision: JsonMap, track: JsonMap) -> JsonMap:

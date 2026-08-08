@@ -10,6 +10,7 @@
         --panel: #0b1118;
         --panel-strong: #101923;
         --line: #1c3042;
+        --panel-border: #152a3f;
         --text: #eff6ff;
         --muted: #91a4b8;
         --blue: #2f7dff;
@@ -17,32 +18,115 @@
         --red: #ff453a;
         --amber: #ffd60a;
         --cyan: #2ee6d6;
+        --yellow: #ffd166;
+        --purple: #bf8cff;
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
+      html,
       body {
+        height: 100%;
         margin: 0;
         background: var(--bg);
         color: var(--text);
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 0.875rem;
+        line-height: 1.28;
+        overflow: hidden;
       }
-      a { color: var(--cyan); }
-      .shell { display: grid; grid-template-rows: 3.5rem minmax(0, 1fr) 13rem; height: 100vh; }
+      a {
+        color: var(--cyan);
+      }
+      .shell {
+        display: grid;
+        grid-template-rows: 7rem minmax(0, 1.45fr) minmax(13rem, 1fr);
+        height: 100vh;
+        max-height: 100vh;
+        overflow: hidden;
+      }
       .header {
         display: grid;
         grid-template-columns: 17rem 1fr auto;
         align-items: center;
         border-bottom: 1px solid var(--line);
         background: #070c12;
+        height: 7rem;
+        min-height: 7rem;
+        overflow: hidden;
       }
-      .run { padding: 0 1rem; font-size: 1rem; font-weight: 650; }
-      .metrics { display: grid; grid-template-columns: repeat(7, minmax(6rem, 1fr)); height: 100%; border-left: 1px solid var(--line); }
-      .metric { padding: 0.55rem 0.8rem; border-right: 1px solid var(--line); }
-      .metric span { display: block; color: var(--muted); font-size: 0.72rem; }
-      .metric strong { display: block; margin-top: 0.2rem; font-size: 1rem; }
-      .status { color: var(--green); }
-      .links { display: flex; gap: 0.5rem; padding: 0 0.8rem; }
-      .linkButton, button {
+      .headLeft {
+        padding: 0.65rem 0.8rem;
+      }
+      .runId {
+        font-size: 1rem;
+        font-weight: 650;
+        color: #e8f1ff;
+      }
+      .runSuite {
+        margin-top: 0.25rem;
+        color: var(--muted);
+        font-size: 0.74rem;
+      }
+      .runTag {
+        margin-top: 0.25rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0.1rem 0.5rem;
+        font-size: 0.62rem;
+        color: var(--muted);
+        background: #070d14;
+      }
+      .status {
+        display: inline-block;
+        margin-top: 0.2rem;
+        color: var(--green);
+        font-weight: 600;
+        font-size: 0.8rem;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(6rem, 1fr));
+        height: 100%;
+        border-left: 1px solid var(--line);
+      }
+      .metric {
+        padding: 0.55rem 0.8rem;
+        border-right: 1px solid var(--line);
+      }
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+      .metric strong {
+        display: block;
+        margin-top: 0.2rem;
+        font-size: 1rem;
+      }
+      .links {
+        position: relative;
+        align-self: stretch;
+        min-width: 31rem;
+        height: 7rem;
+        max-height: 7rem;
+        padding: 0.62rem 0.8rem;
+        overflow: hidden;
+      }
+      .linkRow {
+        position: absolute;
+        top: 0.55rem;
+        right: 0.75rem;
+        display: flex;
+        gap: 0.34rem;
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+      }
+      .linkButton,
+      button {
         border: 1px solid var(--line);
         background: #0c1520;
         color: var(--text);
@@ -50,55 +134,798 @@
         padding: 0.45rem 0.65rem;
         text-decoration: none;
       }
-      .main { display: grid; grid-template-columns: 17rem minmax(0, 1fr) 18rem; min-height: 0; }
-      .panel { min-height: 0; background: var(--panel); border-right: 1px solid var(--line); overflow: auto; }
-      .panelTitle { padding: 0.9rem 0.85rem 0.4rem; color: var(--muted); text-transform: uppercase; font-size: 0.72rem; }
-      .clip { display: grid; grid-template-columns: 4.25rem 1fr; gap: 0.6rem; margin: 0.45rem; padding: 0.45rem; border: 1px solid #17283a; border-radius: 0.45rem; background: #081019; text-align: left; width: calc(100% - 0.9rem); }
-      .clip.active { border-color: var(--blue); box-shadow: inset 0 0 0 1px rgba(47, 125, 255, 0.45); }
-      .thumb { aspect-ratio: 16 / 10; background: #111c28; border: 1px solid var(--line); }
-      .clip strong { display: block; }
-      .clip span { color: var(--muted); font-size: 0.75rem; }
-      .viewer { display: grid; grid-template-rows: minmax(0, 1fr) 2.8rem; min-width: 0; background: #070b10; }
-      .videoGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; padding: 0.75rem; min-height: 0; }
-      .videoPane { position: relative; border: 1px solid var(--line); background: #000; overflow: hidden; }
-      .videoPane video { width: 100%; height: 100%; object-fit: contain; display: block; }
-      .overlaySvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: auto; }
-      .overlayBox { fill: transparent; stroke-width: 4; cursor: pointer; vector-effect: non-scaling-stroke; }
-      .overlayBox.kept { stroke: var(--green); }
-      .overlayBox.rejected { stroke: var(--red); }
-      .overlayBox.merged { stroke: var(--amber); }
-      .overlayBox.dimmed { opacity: 0.16; }
-      .badge { position: absolute; left: 0.6rem; top: 0.55rem; padding: 0.28rem 0.45rem; border-radius: 0.25rem; font-size: 0.72rem; font-weight: 700; background: rgba(12, 21, 32, 0.82); border: 1px solid currentColor; }
-      .raw { color: var(--blue); }
-      .approved { color: var(--green); }
-      .sync { position: absolute; right: 0.6rem; bottom: 0.55rem; color: var(--green); background: rgba(8, 14, 20, 0.84); padding: 0.2rem 0.45rem; border-radius: 0.25rem; }
-      .controls { display: flex; align-items: center; justify-content: center; gap: 0.55rem; border-top: 1px solid var(--line); background: #09111a; }
-      .controls input { width: 8rem; }
-      .inspector { border-right: 0; }
-      .decisionCard { margin: 0.75rem; border: 1px solid var(--line); background: var(--panel-strong); border-radius: 0.45rem; padding: 0.75rem; }
-      .decisionLabel { display: inline-block; margin: 0.4rem 0; padding: 0.25rem 0.45rem; border-radius: 0.25rem; font-weight: 750; background: rgba(255, 69, 58, 0.18); color: var(--red); }
-      .kv { display: grid; grid-template-columns: 6.5rem 1fr; gap: 0.35rem; margin-top: 0.55rem; color: var(--muted); font-size: 0.78rem; }
-      .kv strong { color: var(--text); font-weight: 550; overflow-wrap: anywhere; }
-      .support { padding: 0 0.75rem 0.75rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
-      .pill { border: 1px solid var(--line); padding: 0.25rem 0.4rem; border-radius: 0.3rem; color: var(--muted); font-size: 0.72rem; }
-      .pill.implemented_rejection { color: var(--green); }
-      .pill.heuristic_candidate { color: #bf8cff; }
-      .pill.not_supported { color: #8d98a5; border-style: dashed; }
-      .timeline { border-top: 1px solid var(--line); background: #071019; display: grid; grid-template-columns: 17rem 1fr 18rem; min-height: 0; }
-      .trackList { border-right: 1px solid var(--line); padding: 0.75rem; overflow: auto; }
-      .timeSurface { position: relative; padding: 1rem; overflow-x: auto; overflow-y: hidden; border-right: 1px solid var(--line); }
-      .timeContent { position: relative; min-width: 100%; height: 100%; }
-      .ruler { height: 2.2rem; border-bottom: 1px solid var(--line); color: var(--muted); }
-      .thumbStrip { height: 2.1rem; width: 100%; object-fit: cover; opacity: 0.68; border-bottom: 1px solid #123047; }
-      .lane { position: relative; height: 1.05rem; margin: 0.28rem 0; background: rgba(48, 209, 88, 0.08); }
-      .lane span { position: absolute; height: 100%; background: rgba(48, 209, 88, 0.38); border-left: 3px solid var(--green); }
-      .markers { position: absolute; left: 0; right: 0; bottom: 1rem; height: 5.5rem; border-top: 1px solid #123047; }
-      .markerCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
-      .trackButton { display: block; width: 100%; margin: 0.35rem 0; text-align: left; }
-      .trackButton.active { border-color: var(--green); color: var(--green); }
-      .playhead { position: absolute; top: 0; bottom: 0.4rem; left: 0; width: 2px; background: var(--blue); box-shadow: 0 0 0 1px rgba(47, 125, 255, 0.35); pointer-events: none; }
-      .platforms { padding: 0.75rem; overflow: auto; }
-      .platform { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid #152536; }
+      .linkButton {
+        width: 2.05rem;
+        height: 2.05rem;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0;
+        font-weight: 700;
+      }
+      .linkButton::before {
+        content: attr(data-icon);
+        font-size: 0.72rem;
+        line-height: 1;
+      }
+      .linkButton:hover {
+        border-color: var(--cyan);
+        color: var(--cyan);
+      }
+      .headerMain {
+        padding-right: 9.4rem;
+        min-width: 0;
+      }
+      .headerMain h1 {
+        margin: 0;
+        font-size: 1rem;
+        color: #e6f0ff;
+      }
+      .headerMain p {
+        margin: 0.24rem 0 0;
+        color: var(--muted);
+        font-size: 0.74rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.3rem;
+        margin-top: 0.35rem;
+        overflow: hidden;
+      }
+      .chip {
+        font-size: 0.64rem;
+        border: 1px solid var(--panel-border);
+        border-radius: 999px;
+        padding: 0.15rem 0.5rem;
+        color: var(--muted);
+        white-space: nowrap;
+        flex: 0 0 auto;
+      }
+      .chip.ready {
+        color: var(--green);
+        border-color: rgba(48, 209, 88, 0.55);
+      }
+      .chip.warn {
+        color: var(--yellow);
+        border-color: rgba(255, 209, 102, 0.5);
+      }
+      .main {
+        display: grid;
+        grid-template-columns: 17rem minmax(0, 1fr) 18rem;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .panel {
+        min-height: 0;
+        height: 100%;
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        overflow: auto;
+      }
+      .panel,
+      .trackList,
+      .trackEventList,
+      .timeSurface,
+      .platforms {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(145, 164, 184, 0.48) transparent;
+        scrollbar-gutter: stable;
+      }
+      .panel:hover,
+      .trackList:hover,
+      .trackEventList:hover,
+      .timeSurface:hover,
+      .platforms:hover {
+        scrollbar-color: rgba(145, 164, 184, 0.48) transparent;
+      }
+      .panel::-webkit-scrollbar,
+      .trackList::-webkit-scrollbar,
+      .trackEventList::-webkit-scrollbar,
+      .timeSurface::-webkit-scrollbar,
+      .platforms::-webkit-scrollbar {
+        width: 0.52rem;
+        height: 0.52rem;
+      }
+      .panel::-webkit-scrollbar-track,
+      .trackList::-webkit-scrollbar-track,
+      .trackEventList::-webkit-scrollbar-track,
+      .timeSurface::-webkit-scrollbar-track,
+      .platforms::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .panel::-webkit-scrollbar-thumb,
+      .trackList::-webkit-scrollbar-thumb,
+      .trackEventList::-webkit-scrollbar-thumb,
+      .timeSurface::-webkit-scrollbar-thumb,
+      .platforms::-webkit-scrollbar-thumb {
+        background: rgba(145, 164, 184, 0.36);
+        border-radius: 999px;
+      }
+      .panel:hover::-webkit-scrollbar-thumb,
+      .trackList:hover::-webkit-scrollbar-thumb,
+      .trackEventList:hover::-webkit-scrollbar-thumb,
+      .timeSurface:hover::-webkit-scrollbar-thumb,
+      .platforms:hover::-webkit-scrollbar-thumb {
+        background: rgba(145, 164, 184, 0.48);
+      }
+      .panelTitle {
+        padding: 0.9rem 0.85rem 0.4rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        font-size: 0.72rem;
+      }
+      .panel:last-child {
+        border-right: 0;
+      }
+      .inspector {
+        display: flex;
+        flex-direction: column;
+        overflow: auto;
+      }
+      .clip {
+        display: grid;
+        grid-template-columns: 4.25rem 1fr;
+        gap: 0.6rem;
+        margin: 0.45rem;
+        padding: 0.45rem;
+        border: 1px solid #17283a;
+        border-radius: 0.45rem;
+        background: #081019;
+        text-align: left;
+        width: calc(100% - 0.9rem);
+      }
+      .clip.active {
+        border-color: var(--blue);
+        box-shadow: inset 0 0 0 1px rgba(47, 125, 255, 0.45);
+      }
+      .thumb {
+        width: 4.25rem;
+        aspect-ratio: 16 / 10;
+        border: 1px solid var(--line);
+        border-radius: 0.25rem;
+        background: #111c28;
+        object-fit: cover;
+        object-position: left center;
+      }
+      .clip strong {
+        display: block;
+      }
+      .clip span {
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+      .clipMetrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.2rem;
+        margin-top: 0.4rem;
+        font-size: 0.67rem;
+      }
+      .support {
+        padding: 0 0.75rem 0.75rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+      }
+      .pill {
+        border: 1px solid var(--line);
+        padding: 0.25rem 0.4rem;
+        border-radius: 0.3rem;
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+      .pill.implemented_rejection {
+        color: var(--green);
+      }
+      .pill.heuristic_candidate {
+        color: #bf8cff;
+      }
+      .pill.not_supported {
+        color: #8d98a5;
+        border-style: dashed;
+      }
+      .supportMeta {
+        border-top: 1px solid #132338;
+        margin: 0.6rem 0.75rem 0;
+        padding: 0.55rem 0;
+        font-size: 0.64rem;
+        color: var(--muted);
+      }
+      .demoStory {
+        margin: 0.6rem 0.75rem 0.35rem;
+        border: 1px solid var(--line);
+        background: #08121d;
+        border-radius: 0.45rem;
+        padding: 0.55rem;
+      }
+      .demoStory strong {
+        display: block;
+        color: #e6f0ff;
+        font-size: 0.78rem;
+      }
+      .demoStory span {
+        display: block;
+        margin-top: 0.25rem;
+        color: var(--muted);
+        font-size: 0.66rem;
+      }
+      .chapterList {
+        margin: 0.2rem 0.75rem 0.8rem;
+        display: grid;
+        gap: 0.35rem;
+      }
+      .chapterPill {
+        border: 1px solid var(--line);
+        background: #0c1520;
+        border-radius: 0.35rem;
+        padding: 0.35rem 0.5rem;
+      }
+      .chapterPill strong {
+        font-size: 0.74rem;
+        color: #e6f0ff;
+      }
+      .chapterPill .meta {
+        color: var(--muted);
+        font-size: 0.64rem;
+      }
+      .viewer {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto auto;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .videoGrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.55rem;
+        padding: 0.75rem;
+        min-height: 0;
+      }
+      .videoPane {
+        position: relative;
+        border: 1px solid var(--line);
+        background: #000;
+        overflow: hidden;
+      }
+      .videoPane video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+      .overlaySvg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: auto;
+      }
+      .overlayBox {
+        fill: transparent;
+        stroke-width: 4;
+        cursor: pointer;
+        vector-effect: non-scaling-stroke;
+      }
+      .overlayBox.kept {
+        stroke: var(--green);
+      }
+      .overlayBox.rejected {
+        stroke: var(--red);
+      }
+      .overlayBox.merged {
+        stroke: var(--amber);
+      }
+      .overlayBox.dimmed {
+        opacity: 0.16;
+      }
+      .overlayBox.track-fade {
+        opacity: 0.25;
+      }
+      .overlayLabel {
+        font: 12px sans-serif;
+        fill: #e8f1ff;
+        paint-order: stroke;
+        stroke: rgba(0, 0, 0, 0.7);
+        stroke-width: 2;
+      }
+      .badge {
+        position: absolute;
+        left: 0.6rem;
+        top: 0.55rem;
+        padding: 0.28rem 0.45rem;
+        border-radius: 0.25rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        background: rgba(12, 21, 32, 0.82);
+        border: 1px solid currentColor;
+      }
+      .raw {
+        color: var(--blue);
+      }
+      .approved {
+        color: var(--green);
+      }
+      .rejected {
+        color: var(--red);
+      }
+      .sync {
+        position: absolute;
+        right: 0.6rem;
+        bottom: 0.55rem;
+        color: var(--green);
+        background: rgba(8, 14, 20, 0.84);
+        padding: 0.2rem 0.45rem;
+        border-radius: 0.25rem;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.55rem;
+        border-top: 1px solid var(--line);
+        background: #09111a;
+        padding: 0.45rem 0.5rem;
+      }
+      .toolbarRow {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .toolbarLabel {
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+      .trackJumpBar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        border-top: 1px solid var(--line);
+        padding: 0.35rem 0.6rem 0.45rem;
+        color: var(--muted);
+      }
+      .trackJumpBar strong {
+        color: #e6f0ff;
+        font-size: 0.72rem;
+      }
+      .decisionCard {
+        margin: 0.75rem;
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        border-radius: 0.45rem;
+        padding: 0.75rem;
+      }
+      .inspector .decisionCard {
+        min-height: 6.5rem;
+        max-height: 7.8rem;
+        overflow: auto;
+        flex: 0 0 auto;
+      }
+      .decisionLabel {
+        display: inline-block;
+        margin: 0.4rem 0;
+        padding: 0.25rem 0.45rem;
+        border-radius: 0.25rem;
+        background: rgba(255, 69, 58, 0.18);
+        color: var(--red);
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 6.5rem 1fr;
+        gap: 0.35rem;
+        margin-top: 0.55rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+      .kv strong {
+        color: var(--text);
+        font-weight: 550;
+        overflow-wrap: anywhere;
+      }
+      .decisionList {
+        margin-top: 0.4rem;
+        border-top: 1px solid var(--line);
+        padding-top: 0.55rem;
+      }
+      .decisionStory {
+        margin-top: 0.55rem;
+        padding-top: 0.55rem;
+        border-top: 1px solid var(--line);
+        color: #d8e7ff;
+        font-size: 0.76rem;
+      }
+      .decisionPill {
+        display: inline-flex;
+        gap: 0.28rem;
+        align-items: center;
+        border: 1px solid var(--line);
+        padding: 0.22rem 0.36rem;
+        border-radius: 0.35rem;
+        font-size: 0.7rem;
+        margin-right: 0.32rem;
+        margin-top: 0.2rem;
+        color: var(--muted);
+      }
+      .decisionPill .dot {
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .timeline {
+        border-top: 1px solid var(--line);
+        background: #071019;
+        display: grid;
+        grid-template-columns: 17rem minmax(0, 1fr) 18rem;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .trackList {
+        border-right: 1px solid var(--line);
+        padding: 0.75rem;
+        overflow: auto;
+        scrollbar-gutter: stable both-edges;
+      }
+      .trackStats {
+        padding: 0 0 0.6rem;
+        border-bottom: 1px solid #17283d;
+        margin-bottom: 0.35rem;
+      }
+      .trackStats .label {
+        color: var(--muted);
+        font-size: 0.65rem;
+        margin-bottom: 0.3rem;
+      }
+      .trackStatGrid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.3rem;
+        font-size: 0.68rem;
+      }
+      .trackStatGrid span {
+        color: var(--muted);
+      }
+      .trackStatGrid strong {
+        color: var(--text);
+        overflow-wrap: anywhere;
+      }
+      .trackFilters {
+        padding: 0.35rem 0 0.62rem;
+      }
+      .trackFilters .line {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: 0.2rem;
+        flex-wrap: wrap;
+      }
+      .trackFilters label {
+        font-size: 0.66rem;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 0.32rem;
+      }
+      .trackSwatch {
+        width: 0.62rem;
+        height: 0.62rem;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .trackButton {
+        display: block;
+        width: 100%;
+        margin: 0.28rem 0;
+        text-align: left;
+        border: 1px solid var(--line);
+      }
+      .trackButton strong {
+        font-size: 0.73rem;
+        display: inline-flex;
+        gap: 0.32rem;
+        align-items: center;
+      }
+      .trackButton .meta {
+        display: block;
+        color: var(--muted);
+        font-size: 0.68rem;
+      }
+      .trackButton.active {
+        border-color: var(--green);
+        color: var(--green);
+        box-shadow: inset 0 0 0 1px rgba(48, 209, 88, 0.42);
+      }
+      .timeSurface {
+        position: relative;
+        padding: 0.8rem 1rem 1.15rem;
+        overflow-x: auto;
+        overflow-y: auto;
+        scrollbar-gutter: stable both-edges;
+      }
+      .timeContent {
+        position: relative;
+        min-width: 100%;
+        height: 100%;
+      }
+      #lanes {
+        margin-top: 3.2rem;
+      }
+      .ruler {
+        min-height: 3rem;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.28rem 0.45rem;
+        align-items: center;
+        align-content: center;
+      }
+      .ruler span {
+        white-space: nowrap;
+      }
+      .legend {
+        margin-left: 0.2rem;
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.2rem 0.32rem;
+        max-height: 2rem;
+        overflow: hidden;
+      }
+      .legendBreak {
+        flex-basis: 100%;
+        height: 0;
+      }
+      .legendItem {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.26rem;
+        font-size: 0.6rem;
+        color: #d2deea;
+      }
+      .legendSwatch {
+        width: 0.62rem;
+        height: 0.62rem;
+        border-radius: 2px;
+      }
+      .legendSwatch.strokeRed {
+        background: transparent;
+        border: 2px solid var(--red);
+      }
+      .legendSwatch.strokeAmber {
+        background: transparent;
+        border: 2px solid var(--amber);
+      }
+      .legendSwatch.trackRing {
+        background: transparent;
+        border: 2px solid var(--blue);
+        border-radius: 50%;
+      }
+      .zoomScale {
+        margin-left: auto;
+      }
+      .zoomValue {
+        margin-left: 0.45rem;
+        font-size: 0.68rem;
+        color: var(--muted);
+      }
+      .thumbStrip {
+        height: 1.85rem;
+        width: 100%;
+        object-fit: cover;
+        opacity: 0.68;
+        border-bottom: 1px solid #123047;
+      }
+      .lane {
+        position: relative;
+        height: 1.08rem;
+        margin: 0.3rem 0;
+        border-radius: 0.1rem;
+        background: #091b2a;
+        border: 1px solid #173552;
+      }
+      .lane.frameLane {
+        background: #0b1320;
+        border-color: #26405b;
+      }
+      .lane.activeTrack {
+        outline: 1px solid rgba(47, 125, 255, 0.55);
+      }
+      .laneLabel {
+        position: absolute;
+        left: 0.32rem;
+        top: 0;
+        bottom: 0;
+        color: #bfd3e8;
+        font-size: 0.58rem;
+        display: flex;
+        align-items: center;
+        gap: 0.32rem;
+        pointer-events: none;
+      }
+      .laneSpan {
+        position: absolute;
+        height: 100%;
+        top: 0;
+        border-radius: 0.08rem;
+        border: 1px solid;
+      }
+      .laneAcceptedSpan {
+        z-index: 1;
+        height: 28%;
+        top: 36%;
+      }
+      .laneProblemSpan {
+        z-index: 2;
+        height: 48%;
+        top: 26%;
+      }
+      .laneEventMarker {
+        z-index: 4;
+        min-width: 0.34rem;
+        min-height: 0.34rem;
+        box-shadow: 0 0 0 1px rgba(5, 8, 12, 0.72);
+      }
+      .laneEventMarker.active {
+        outline: 2px solid #e8f1ff;
+      }
+      .markerCanvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        cursor: pointer;
+        z-index: 3;
+      }
+      .spanCanvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        pointer-events: none;
+        z-index: 2;
+      }
+      .markers {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 4.98rem;
+        height: 2.85rem;
+        border-top: 1px solid rgba(28, 48, 66, 0.7);
+        border-bottom: 1px solid rgba(28, 48, 66, 0.7);
+        background: linear-gradient(180deg, rgba(8, 19, 31, 0.72), rgba(5, 10, 16, 0.68));
+      }
+      .playhead {
+        position: absolute;
+        top: 0;
+        bottom: 0.4rem;
+        left: 0;
+        width: 2px;
+        background: var(--blue);
+        box-shadow: 0 0 0 1px rgba(47, 125, 255, 0.35);
+        pointer-events: none;
+      }
+      .playheadHandle {
+        position: absolute;
+        left: -0.2rem;
+        top: -0.3rem;
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+        background: #d8e7ff;
+      }
+      .platforms {
+        padding: 0.75rem;
+        overflow: auto;
+        border-left: 1px solid var(--line);
+        min-height: 0;
+      }
+      .platformsHeader {
+        display: block;
+        padding: 0.1rem 0 0.25rem;
+        margin-bottom: 0.4rem;
+        color: var(--muted);
+        font-size: 0.66rem;
+        text-transform: uppercase;
+      }
+      .platform {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.35rem 0;
+        border-bottom: 1px solid #152536;
+      }
+      .platform a {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .timelineState {
+        color: var(--muted);
+        margin-top: 0.3rem;
+        border-top: 1px solid #132338;
+        padding-top: 0.35rem;
+        font-size: 0.66rem;
+      }
+      #rulerBottom {
+        position: absolute;
+        left: 1rem;
+        right: 1rem;
+        bottom: 0.2rem;
+        display: grid;
+        grid-template-columns: auto 1fr;
+      }
+      .timelineSummary {
+        margin-top: 0.5rem;
+        color: var(--muted);
+        font-size: 0.64rem;
+      }
+      .timelineSummary strong {
+        color: #e6f0ff;
+      }
+      .trackEventList {
+        margin: 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 0.45rem;
+        background: var(--panel-strong);
+        overflow: auto;
+        min-height: 4.5rem;
+        flex: 1 1 auto;
+      }
+      .trackEventHeader,
+      .trackEventItem {
+        display: grid;
+        grid-template-columns: 0.95fr 0.9fr 1.45fr 1fr;
+        gap: 0.22rem;
+        width: 100%;
+      }
+      .trackEventHeader {
+        position: sticky;
+        top: 0;
+        background: #0a1520;
+        border-bottom: 1px solid var(--line);
+        padding: 0.42rem 0.4rem;
+        font-size: 0.62rem;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      .trackEventItem {
+        appearance: none;
+        border: 0;
+        margin: 0;
+        width: 100%;
+        text-align: left;
+        border-top: 1px solid #122942;
+        background: transparent;
+        color: var(--text);
+        padding: 0.3rem 0.35rem;
+        cursor: pointer;
+        font-size: 0.7rem;
+      }
+      .trackEventItem:hover {
+        background: #0a1623;
+      }
+      .trackEventItem.active {
+        background: #0f2842;
+        outline: 1px solid rgba(47, 125, 255, 0.55);
+      }
+      .trackEventOverflow {
+        color: var(--muted);
+        font-size: 0.64rem;
+        padding: 0.34rem 0.4rem;
+      }
+      .trackEventEmpty {
+        padding: 0.6rem 0.4rem;
+        color: var(--muted);
+        font-size: 0.66rem;
+      }
     </style>
   </head>
   <body>
@@ -109,22 +936,37 @@
       data-suite-id="{{ suite_id }}"
     >
       <header class="header">
-        <div class="run">
-          {{ story.run_suite_id }}<br />
+        <div class="headLeft">
+          <div class="runId">{{ story.run_suite_id }} / {{ story.run_id }}</div>
+          <div class="runSuite">{{ story.experiment_id }} · {{ story.status }}</div>
+          <span class="runTag">layout: {{ story.default_layout_id }}</span>
           <span class="status">{{ story.status }}</span>
         </div>
         <div class="metrics">
           <div class="metric"><span>Run</span><strong>{{ story.run_id }}</strong></div>
           <div class="metric"><span>Clips</span><strong>{{ story.clips | length }}</strong></div>
-          <div class="metric"><span>Raw</span><strong>{{ story.raw_detection_count }}</strong></div>
+          <div class="metric"><span>Raw Dets.</span><strong>{{ story.raw_detection_count }}</strong></div>
           <div class="metric"><span>Kept</span><strong>{{ story.kept_detection_count }}</strong></div>
-          <div class="metric"><span>Rejected</span><strong>{{ story.rejected_detection_count }}</strong></div>
-          <div class="metric"><span>Interpolation</span><strong>{{ story.interpolated_detection_count }}</strong></div>
-          <div class="metric"><span>Layout</span><strong>{{ story.default_layout_id }}</strong></div>
+          <div class="metric"><span>Rejected/Merged</span><strong>{{ story.rejected_detection_count }}</strong></div>
+          <div class="metric"><span>Interpol.</span><strong>{{ story.interpolated_detection_count }}</strong></div>
         </div>
         <nav class="links">
-          <a class="linkButton" href="/runs/{{ suite_id }}/{{ run_id }}" target="_blank" rel="noopener noreferrer">Run</a>
-          <a class="linkButton" href="/artifacts/{{ suite_id }}/{{ run_id }}/review/story.json" target="_blank" rel="noopener noreferrer">Story JSON</a>
+            <div class="linkRow">
+            <a class="linkButton" data-icon="R" href="/runs/{{ suite_id }}/{{ run_id }}" target="_blank" rel="noopener noreferrer" title="Run report" aria-label="Run report">Run</a>
+            <a class="linkButton" data-icon="J" href="/artifacts/{{ suite_id }}/{{ run_id }}/review/story.json" target="_blank" rel="noopener noreferrer" title="Story JSON" aria-label="Story JSON">Story JSON</a>
+            <a class="linkButton" data-icon="S" href="/artifacts/{{ suite_id }}/{{ run_id }}/report/index.html" target="_blank" rel="noopener noreferrer" title="Static report" aria-label="Static report">Static Report</a>
+            <a class="linkButton" data-icon="V" href="/artifacts/{{ suite_id }}/{{ run_id }}/report/visual-review.html" target="_blank" rel="noopener noreferrer" title="Visual review" aria-label="Visual review">Visual Review</a>
+          </div>
+          <div class="headerMain">
+            <h1>Story Review</h1>
+            <p>Compare raw detector output with approved trajectory-level adapter output for one trajectory at a time.</p>
+            <div class="chips">
+              <span class="chip ready">Frame-synced dual view</span>
+              <span class="chip ready">Decision timeline</span>
+              <span class="chip ready">Track isolation</span>
+              <span class="chip warn">Low-quality jump links</span>
+            </div>
+          </div>
         </nav>
       </header>
       <main class="main">
@@ -132,19 +974,35 @@
           <div class="panelTitle">Clips</div>
           {% for clip in story.clips %}
           <button class="clip{% if loop.first %} active{% endif %}" data-clip-index="{{ loop.index0 }}">
-            <span class="thumb"></span>
+            <img class="thumb" src="/artifacts/{{ suite_id }}/{{ run_id }}/{{ clip.thumbnail_strip_url }}" alt="{{ clip.label }} preview" loading="lazy" />
             <span>
               <strong>{{ clip.clip_id }}</strong>
               <span>{{ clip.label }}</span><br />
-              <span>{{ clip.frame_count }} frames · {{ clip.rejected_detection_count }} changed</span>
+              <span>{{ clip.frame_count }} frames · {{ clip.changed_frame_count }} changed</span>
+              <span class="clipMetrics">
+                <span>Raw {{ clip.raw_detection_count }}</span>
+                <span>Kept {{ clip.kept_detection_count }}</span>
+                <span>Rejected {{ clip.rejected_detection_count }}</span>
+              </span>
             </span>
           </button>
           {% endfor %}
-          <div class="panelTitle">Edge Cases</div>
+          <div class="panelTitle">Rejection Taxonomy</div>
           <div class="support">
             {% for state in story.support_states %}
-            <span class="pill {{ state.state }}">{{ state.label }}</span>
+            <span class="pill {{ state.state }}" title="{{ state.description }}">{{ state.label }}</span>
             {% endfor %}
+          </div>
+          <div class="supportMeta">Select a reason marker to jump to low-quality examples immediately.</div>
+          <div class="demoStory" id="demoStory">
+            <strong>Trajectory cleanup story</strong>
+            <span>Loading run evidence...</span>
+          </div>
+          <div class="chapterList" id="chapterList">
+            <div class="chapterPill">
+              <strong>Loading chapters...</strong>
+              <div class="meta">Decision clusters and MOT landmarks will load after clip selection.</div>
+            </div>
           </div>
         </aside>
         <section class="viewer">
@@ -162,34 +1020,91 @@
             </div>
           </div>
           <div class="controls">
-            <button id="prevEvent" type="button">Prev Event</button>
-            <button id="playPause" type="button">Play/Pause</button>
-            <button id="nextEvent" type="button">Next Event</button>
-            <label>Zoom <input id="zoomSlider" type="range" min="1" max="8" step="0.25" value="1" /></label>
-            <span id="timeLabel">00:00.000</span>
+            <div class="toolbarRow">
+              <span class="toolbarLabel">Playback</span>
+              <button id="prevEvent" type="button">Prev Change</button>
+              <button id="playPause" type="button">Play/Pause</button>
+              <button id="nextEvent" type="button">Next Change</button>
+              <button id="fitToTrackBtn" type="button">Fit Track</button>
+              <button id="clearTrackBtn" type="button">Clear Track</button>
+              <button id="focusTrackBtn" type="button">Focus</button>
+            </div>
+            <div class="toolbarRow">
+              <span class="toolbarLabel">Compare Layers</span>
+              <button id="showRaw" type="button">Raw All</button>
+              <button id="showAdapterKeptOnly" type="button">Kept Only</button>
+              <button id="showAdapterRejectedOnly" type="button">Rejected Only</button>
+            </div>
+            <div class="toolbarRow">
+              <span class="toolbarLabel">Zoom <input id="zoomSlider" type="range" min="1" max="8" step="0.25" value="1" /></span>
+              <span id="zoomText" class="zoomValue">1.00x</span>
+              <span id="timeLabel">00:00.000</span>
+            </div>
+          </div>
+          <div class="trackJumpBar">
+            <strong>Track Controls:</strong>
+            <button id="prevTrackEvent" type="button">Prev Track Event</button>
+            <button id="nextTrackEvent" type="button">Next Track Event</button>
+            <span id="trackSummary"></span>
           </div>
         </section>
         <aside class="panel inspector">
           <div class="panelTitle">Detection Decision</div>
           <div class="decisionCard" id="decisionCard">Select a timeline marker.</div>
+          <div class="panelTitle">Trajectory Event Stream</div>
+          <div class="trackEventList" id="trackEventList"><div class="trackEventEmpty">Select a trajectory to inspect low-quality edits.</div></div>
         </aside>
       </main>
       <footer class="timeline">
         <div class="trackList">
           <strong>Tracks</strong>
+          <div class="trackStats">
+            <div class="label">Selected Track</div>
+            <div class="trackStatGrid">
+              <span>Track ID</span><strong id="selectedTrackLabel">Not selected</strong>
+              <span>Changes</span><strong id="selectedTrackChanges">0</strong>
+              <span>Kept</span><strong id="selectedTrackKept">0</strong>
+              <span>Rejected</span><strong id="selectedTrackRejected">0</strong>
+              <span>Span</span><strong id="selectedTrackSpan">--</strong>
+            </div>
+          </div>
+          <div class="trackFilters">
+            <div class="line">
+              <label><input id="showOnlyActiveTrack" type="checkbox" /> Active Track Only</label>
+              <label><input id="showOnlyLowQuality" type="checkbox" checked /> Low-Quality Frames</label>
+            </div>
+          </div>
           <div id="trackList"></div>
         </div>
         <div class="timeSurface">
           <div class="timeContent" id="timeContent">
-            <div class="ruler" id="ruler">Loading timeline</div>
+            <div class="ruler" id="ruler">
+              <span id="rulerLabel">Loading timeline</span>
+              <div class="legend" id="timelineLegend">
+                <span class="legendItem"><span class="legendSwatch" style="background:var(--red)"></span>Rejected</span>
+                <span class="legendItem"><span class="legendSwatch" style="background:var(--amber)"></span>Merged</span>
+                <span class="legendItem"><span class="legendSwatch" style="background:var(--green)"></span>Kept</span>
+                <span class="legendItem"><span class="legendSwatch" style="background:var(--blue)"></span>Track</span>
+                <span class="legendItem"><span class="legendSwatch" style="background:var(--purple)"></span>Max-two</span>
+              </div>
+              <span class="zoomScale">Zoom <span id="zoomBadge">1x</span></span>
+            </div>
             <img id="thumbStrip" class="thumbStrip" alt="" />
             <div id="lanes"></div>
-            <div class="markers" id="markers"><canvas id="markerCanvas" class="markerCanvas"></canvas></div>
-            <div class="playhead" id="playhead"></div>
+            <div class="markers" id="markers">
+              <canvas id="spanCanvas" class="spanCanvas"></canvas>
+              <canvas id="markerCanvas" class="markerCanvas"></canvas>
+            </div>
+            <div class="playhead" id="playhead"><div class="playheadHandle"></div></div>
+            <div id="rulerBottom" class="trackStatGrid" style="left: 1rem; right: 1rem;">
+              <span>Cursor Frame</span><strong id="cursorFrame">0</strong>
+              <span>Decision</span><strong id="cursorDecision">Idle</strong>
+              <span>Reason</span><strong id="cursorReason">Idle</strong>
+            </div>
           </div>
         </div>
         <div class="platforms">
-          <strong>Platform Bridge</strong>
+          <strong class="platformsHeader">Platform Bridge</strong>
           {% for platform in story.platforms %}
           <div class="platform">
             <span>{{ platform.label }}</span>
@@ -200,6 +1115,8 @@
             {% endif %}
           </div>
           {% endfor %}
+          <div class="timelineState">Frame-synchronous review for selected clip.</div>
+          <div class="timelineSummary" id="timelineSummaryText"></div>
         </div>
       </footer>
     </div>

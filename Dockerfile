@@ -50,6 +50,7 @@ COPY --from=wheel-builder /wheels /wheels
 RUN python -m venv "$VIRTUAL_ENV" \
   && pip install --upgrade pip \
   && pip install --no-index --find-links=/wheels handdetect-quality \
+  && ln -sf "$VIRTUAL_ENV/bin/handdetect" /usr/local/bin/handdetect \
   && rm -rf /wheels
 
 COPY pyproject.toml /workspace/pyproject.toml

@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -19,6 +20,20 @@ from handdetect.lineage.replay import LineageReplayService
 from handdetect.review_journey.launcher import ReviewJourneyLauncher
 from handdetect.runtime_config import parse_config_with_runtime_env
 from handdetect.runtime_paths import runs_root, workbench_job_root
+
+PROGRESS_PHASES: tuple[tuple[str, str], ...] = (
+    ("pipeline", "Adapter pipeline"),
+    ("samples", "Review samples"),
+    ("fiftyone_manifest", "FiftyOne manifest"),
+    ("label_studio_export", "Label Studio export"),
+    ("story_media", "Story media"),
+    ("lineage", "Lineage snapshot"),
+    ("review_platforms", "Platform bridge"),
+)
+PROGRESS_LINE_RE = re.compile(
+    r"\bprogress\s+phase=(?P<phase>[a-z0-9_-]+)\s+"
+    r"status=(?P<status>[a-z0-9_-]+)\s+message=(?P<message>.*)$"
+)
 
 
 def create_app() -> FastAPI:
@@ -36,7 +51,7 @@ def create_app() -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> HTMLResponse:
-        runs = []
+        runs: list[dict[str, object]] = []
         current_runs_root = runs_root()
         for suite_dir in sorted(current_runs_root.glob("suite-*")):
             for run_dir in sorted(suite_dir.iterdir()):
@@ -46,7 +61,10 @@ def create_app() -> FastAPI:
                 if not manifest_path.exists():
                     continue
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-                runs.append(manifest)
+                if not isinstance(manifest, dict):
+                    continue
+                runs.append(run_index_row(manifest, run_dir))
+        runs.sort(key=lambda row: int(row["workbench_timestamp_ms"]), reverse=True)
         return templates.TemplateResponse(
             request,
             "index.html",
@@ -83,6 +101,7 @@ def create_app() -> FastAPI:
         suite_id, run_id = parse_run_ids(log_text)
         is_complete = exit_path.exists()
         exit_code = int(exit_path.read_text(encoding="utf-8")) if is_complete else None
+        progress_steps = job_progress_steps(log_text, is_complete, exit_code)
         can_open_run = bool(
             exit_code == 0 and suite_id and run_id and (runs_root() / suite_id / run_id).exists()
         )
@@ -98,6 +117,8 @@ def create_app() -> FastAPI:
                 "suite_id": suite_id,
                 "run_id": run_id,
                 "can_open_run": can_open_run,
+                "progress_steps": progress_steps,
+                "current_step": current_progress_step(progress_steps),
             },
         )
 
@@ -245,6 +266,59 @@ def story_summary(run_root: Path) -> dict[str, object]:
     }
 
 
+def run_index_row(manifest: dict[str, object], run_dir: Path) -> dict[str, object]:
+    timestamp = manifest_timestamp(manifest, run_dir)
+    row = dict(manifest)
+    row["workbench_timestamp_iso"] = timestamp.isoformat().replace("+00:00", "Z")
+    row["workbench_timestamp_ms"] = int(timestamp.timestamp() * 1000)
+    row["workbench_status"] = run_status(run_dir)
+    return row
+
+
+def manifest_timestamp(manifest: dict[str, object], run_dir: Path) -> datetime:
+    for key in ("created_at", "started_at", "completed_at", "timestamp", "run_started_at"):
+        value = manifest.get(key)
+        if isinstance(value, str):
+            parsed = parse_datetime(value)
+            if parsed is not None:
+                return parsed
+    for key in ("run_suite_id", "run_id"):
+        value = manifest.get(key)
+        if isinstance(value, str):
+            parsed = parse_timestamp_from_id(value)
+            if parsed is not None:
+                return parsed
+    return datetime.fromtimestamp(run_dir.stat().st_mtime, UTC)
+
+
+def parse_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def parse_timestamp_from_id(value: str) -> datetime | None:
+    match = re.search(r"(\d{8}T\d{6}(?:\d{6})?Z)", value)
+    if not match:
+        return None
+    raw_timestamp = match.group(1)
+    try:
+        return datetime.strptime(raw_timestamp, "%Y%m%dT%H%M%S%fZ").replace(tzinfo=UTC)
+    except ValueError:
+        try:
+            return datetime.strptime(raw_timestamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+        except ValueError:
+            return None
+
+
+def run_status(run_dir: Path) -> str:
+    return "complete" if (run_dir / "review" / "story.json").exists() else "artifacts"
+
+
 def generator_package_bundle_payload() -> dict[str, object]:
     package_root = Path.cwd() / "generator-package"
     manifest = json.loads(
@@ -341,6 +415,51 @@ def parse_run_ids(log_text: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+def job_progress_steps(
+    log_text: str, is_complete: bool, exit_code: int | None
+) -> list[dict[str, str]]:
+    steps = {
+        phase: {
+            "phase": phase,
+            "label": label,
+            "status": "pending",
+            "message": "waiting",
+        }
+        for phase, label in PROGRESS_PHASES
+    }
+    for line in log_text.splitlines():
+        match = PROGRESS_LINE_RE.search(line)
+        if not match:
+            continue
+        phase = match.group("phase")
+        if phase not in steps:
+            continue
+        steps[phase]["status"] = match.group("status")
+        steps[phase]["message"] = match.group("message")
+    if is_complete and exit_code == 0:
+        for step in steps.values():
+            if step["status"] == "pending":
+                step["status"] = "skipped"
+                step["message"] = "not required for this run"
+    if is_complete and exit_code not in (None, 0):
+        for step in reversed(list(steps.values())):
+            if step["status"] == "running":
+                step["status"] = "failed"
+                step["message"] = step["message"] or "failed"
+                break
+    return list(steps.values())
+
+
+def current_progress_step(progress_steps: list[dict[str, str]]) -> dict[str, str] | None:
+    for step in progress_steps:
+        if step["status"] == "running":
+            return step
+    for step in progress_steps:
+        if step["status"] == "pending":
+            return step
+    return None
+
+
 def self_contained_job_script(log_path: Path, exit_path: Path) -> str:
     job_root = workbench_job_root()
     python_executable = sys.executable
@@ -348,33 +467,8 @@ def self_contained_job_script(log_path: Path, exit_path: Path) -> str:
 set -uo pipefail
 mkdir -p {job_root}
 status=0
-{python_executable} -m handdetect.cli.main run \\
+{python_executable} -u -m handdetect.cli.main run-smoke-experiment \\
   --config configs/smoke-experiment.toml 2>&1 | tee {log_path} || status=$?
-if [ "$status" -eq 0 ]; then
-  suite_id=$(sed -n 's/.*suite_id=\\([^ ]*\\).*/\\1/p' {log_path} | tail -1)
-  run_id=$(sed -n 's/.*run_id=\\([^ ]*\\).*/\\1/p' {log_path} | tail -1)
-  if [ -n "$suite_id" ] && [ -n "$run_id" ]; then
-    HANDDETECT_JOB_SUITE_ID="$suite_id" \\
-    HANDDETECT_JOB_RUN_ID="$run_id" \\
-    {python_executable} - <<'PY' >> {log_path} 2>&1 || status=$?
-import os
-from urllib.parse import quote
-from urllib.request import Request, urlopen
-
-suite_id = quote(os.environ["HANDDETECT_JOB_SUITE_ID"], safe="")
-run_id = quote(os.environ["HANDDETECT_JOB_RUN_ID"], safe="")
-base_url = os.environ.get("HANDDETECT_WORKBENCH_INTERNAL_URL", "http://127.0.0.1:8000")
-url = f"{{base_url.rstrip('/')}}/runs/{{suite_id}}/{{run_id}}/review/open"
-public_base_url = os.environ.get("HANDDETECT_WORKBENCH_PUBLIC_URL", base_url).rstrip("/")
-public_url = f"{{public_base_url}}/runs/{{suite_id}}/{{run_id}}"
-request = Request(url, method="POST")
-with urlopen(request, timeout=120) as response:
-    print(f"review_open_status={{response.status}} url={{public_url}}")
-PY
-  else
-    status=1
-  fi
-fi
 printf '%s' "$status" > {exit_path}
 exit "$status"
 """.strip()
