@@ -196,6 +196,16 @@ class ReviewJourneyLauncher:
                     ),
                     "generator_external_source_file_count": str(publication.source.file_count),
                     "generator_external_source_byte_length": str(publication.source.byte_length),
+                    "generator_external_table_id": publication.table.table_id,
+                    "generator_external_table_display_name": publication.table.display_name,
+                    "generator_external_table_relative_pattern": (
+                        publication.table.relative_pattern
+                    ),
+                    "generator_external_table_schema_ref": publication.table.schema_ref,
+                    "generator_external_table_schema_fingerprint": ",".join(
+                        str(item) for item in publication.table.schema_fingerprint
+                    ),
+                    "generator_external_table_refresh_policy": "manual_refresh",
                 }
             )
         query = urlencode(params)

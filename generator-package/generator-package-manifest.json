@@ -62,7 +62,19 @@
   ],
   "views": [
     {
-      "sql": "views/handdetect_story_views.sql"
+      "sql": "views/handdetect_story_views.sql",
+      "materialization": {
+        "handdetect_story_rows_v1": "pass_through",
+        "handdetect_story_runs_v1": "pass_through",
+        "handdetect_story_clips_v1": "pass_through",
+        "handdetect_story_rejections_v1": "pass_through",
+        "handdetect_story_viewer_v1": "pass_through",
+        "handdetect_story_events_v1": "pass_through",
+        "handdetect_story_tracks_v1": "pass_through",
+        "handdetect_story_timeline_v1": "pass_through",
+        "handdetect_story_platforms_v1": "pass_through",
+        "handdetect_story_diagnostics_v1": "pass_through"
+      }
     }
   ],
   "ui": {

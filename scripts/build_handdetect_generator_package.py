@@ -18,6 +18,7 @@ from biodock.generator_sdk.package_authoring import (  # noqa: E402
     PackageWorkspaceSpec,
     RawAdmissionSpec,
     ViewSpec,
+    WorkspaceJourneySpec,
     WorkspaceLayoutSpec,
     WorkspacePanelSpec,
     WorkspaceThemeSpec,
@@ -74,7 +75,23 @@ def handdetect_generator_package_bundle() -> GeneratorPackageBundleSpec:
                 families=("b_runtime_status", "b_artifact"),
             ),
         ),
-        views=(ViewSpec(sql="views/handdetect_story_views.sql"),),
+        views=(
+            ViewSpec(
+                materialization={
+                    "handdetect_story_rows_v1": "pass_through",
+                    "handdetect_story_runs_v1": "pass_through",
+                    "handdetect_story_clips_v1": "pass_through",
+                    "handdetect_story_rejections_v1": "pass_through",
+                    "handdetect_story_viewer_v1": "pass_through",
+                    "handdetect_story_events_v1": "pass_through",
+                    "handdetect_story_tracks_v1": "pass_through",
+                    "handdetect_story_timeline_v1": "pass_through",
+                    "handdetect_story_platforms_v1": "pass_through",
+                    "handdetect_story_diagnostics_v1": "pass_through",
+                },
+                sql="views/handdetect_story_views.sql",
+            ),
+        ),
         workspace=_workspace_spec(),
     )
 
@@ -89,6 +106,7 @@ def _workspace_spec() -> PackageWorkspaceSpec:
             overrideCssPath="ui/themes/handdetect-story.overrides.css",
         ),
         panels=_panels(),
+        journeys=_journeys(),
         layouts=_layouts(),
     )
 
@@ -133,6 +151,43 @@ def _panel(
         title=title,
         viewId=view_id,
         appPanel=app_panel,
+    )
+
+
+def _journeys() -> tuple[WorkspaceJourneySpec, ...]:
+    return (
+        WorkspaceJourneySpec(
+            mode="live_suite_console",
+            title="Live Suite Console",
+            layoutId="handdetect_customer_demo_console",
+            primaryActionId="handdetect.run_smoke_experiment",
+            sourceViewId="handdetect_story_runs_v1",
+            targetPanelId="handdetect_story_header",
+        ),
+        WorkspaceJourneySpec(
+            mode="run_selection",
+            title="Click A Run",
+            layoutId="handdetect_customer_demo_console",
+            sourceViewId="handdetect_story_runs_v1",
+            targetPanelId="handdetect_story_header",
+        ),
+        WorkspaceJourneySpec(
+            mode="pinned_story_review",
+            title="Run Story Review",
+            layoutId="handdetect_customer_demo_console",
+            sourceViewId="handdetect_story_timeline_v1",
+            targetPanelId="handdetect_timeline",
+            pinnedSnapshotRequired=True,
+        ),
+        WorkspaceJourneySpec(
+            mode="replay_fork",
+            title="Replay / Fork Experiment",
+            layoutId="handdetect_customer_demo_console",
+            primaryActionId="handdetect.run_smoke_experiment",
+            sourceViewId="handdetect_story_runs_v1",
+            targetPanelId="handdetect_story_header",
+            pinnedSnapshotRequired=True,
+        ),
     )
 
 

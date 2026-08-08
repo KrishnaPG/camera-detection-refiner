@@ -143,6 +143,42 @@
       }
     }
   ],
+  "journeys": [
+    {
+      "mode": "live_suite_console",
+      "title": "Live Suite Console",
+      "layoutId": "handdetect_customer_demo_console",
+      "primaryActionId": "handdetect.run_smoke_experiment",
+      "sourceViewId": "handdetect_story_runs_v1",
+      "targetPanelId": "handdetect_story_header",
+      "pinnedSnapshotRequired": false
+    },
+    {
+      "mode": "run_selection",
+      "title": "Click A Run",
+      "layoutId": "handdetect_customer_demo_console",
+      "sourceViewId": "handdetect_story_runs_v1",
+      "targetPanelId": "handdetect_story_header",
+      "pinnedSnapshotRequired": false
+    },
+    {
+      "mode": "pinned_story_review",
+      "title": "Run Story Review",
+      "layoutId": "handdetect_customer_demo_console",
+      "sourceViewId": "handdetect_story_timeline_v1",
+      "targetPanelId": "handdetect_timeline",
+      "pinnedSnapshotRequired": true
+    },
+    {
+      "mode": "replay_fork",
+      "title": "Replay / Fork Experiment",
+      "layoutId": "handdetect_customer_demo_console",
+      "primaryActionId": "handdetect.run_smoke_experiment",
+      "sourceViewId": "handdetect_story_runs_v1",
+      "targetPanelId": "handdetect_story_header",
+      "pinnedSnapshotRequired": true
+    }
+  ],
   "theme": {
     "skinPackId": "handdetect-forensic-workbench",
     "overrideCssPath": "ui/themes/handdetect-story.overrides.css",

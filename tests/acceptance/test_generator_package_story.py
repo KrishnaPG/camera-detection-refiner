@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -83,6 +84,13 @@ def test_generator_package_uses_biodock_video_review_layout() -> None:
     }
     assert panel_view_ids <= annotated_view_ids
     assert "schema=schemas/handdetect-story-row.schema.json" in views_sql
+    assert "-- berg10:view id=handdetect_story_rows_v1" in views_sql
+    assert "-- layer=semantic kind=table materialization=pass_through" in views_sql
+    assert "create view handdetect_story_rows_v1 as" in views_sql
+    assert len(re.findall(r"\bfrom\s+handdetect_story_rows\b(?!_v1)", views_sql)) == 1
+    assert "from handdetect_story_rows_v1" in views_sql
+    materialization = manifest["views"][0]["materialization"]
+    assert materialization["handdetect_story_rows_v1"] == "pass_through"
 
 
 def test_generator_package_descriptor_is_sdk_generated() -> None:
